@@ -1,0 +1,149 @@
+import CryptoKit
+import GRDB
+import XCTest
+@testable import DistiXCore
+
+final class WhatsAppSourceTests: XCTestCase {
+    var dir: URL!
+    var dbURL: URL!
+    var writer: DatabaseQueue!
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("distix-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        dbURL = dir.appendingPathComponent("ChatStorage.sqlite")
+        writer = try FakeWhatsApp.build(at: dbURL)
+    }
+
+    override func tearDownWithError() throws {
+        writer = nil
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func digest() throws -> [String: String] {
+        var out: [String: String] = [:]
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(fileURLWithPath: dbURL.path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            out[suffix] = SHA256.hash(data: try Data(contentsOf: url)).description
+        }
+        return out
+    }
+
+    func testOriginalFilesUntouchedAndCopyRemoved() async throws {
+        let before = try digest()
+        XCTAssertNotNil(before["-wal"])
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        _ = try snap.listConversations()
+        _ = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
+        snap.close()
+        XCTAssertEqual(before, try digest())
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path)
+            .filter { $0.hasPrefix("distix-") && !$0.hasPrefix("distix-test") && !$0.hasPrefix("distix-claude") }
+        XCTAssertEqual(leftovers, [])
+    }
+
+    func testListsOnlyGroups() async throws {
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        defer { snap.close() }
+        let names = try snap.listConversations().map(\.name)
+        XCTAssertEqual(Set(names), ["Investisseurs Immo", "Club Lecture"])
+    }
+
+    func testMessagesOfOneGroupOnly() async throws {
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        defer { snap.close() }
+        let msgs = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
+        XCTAssertEqual(msgs.map(\.sourceId), ["AAA1", "AAA2", "AAA3", "AAA4", "AAA5"])
+        XCTAssertFalse(msgs.contains { $0.text?.contains("Secret") == true || $0.text?.contains("privé") == true })
+    }
+
+    func testAuthorsKindsRepliesReactionsDates() async throws {
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        defer { snap.close() }
+        let m = Dictionary(uniqueKeysWithValues: try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
+            .map { ($0.sourceId, $0) })
+        XCTAssertEqual(m["AAA1"]?.authorId, "111111111@lid")
+        XCTAssertEqual(m["AAA1"]?.authorDisplayName, "Alice")           // ZFIRSTNAME (ZCONTACTNAME vide)
+        XCTAssertEqual(m["AAA2"]?.authorDisplayName, "Bruno")           // ZWAPROFILEPUSHNAME
+        XCTAssertEqual(m["AAA3"]?.authorId, "me")
+        XCTAssertEqual(m["AAA5"]?.authorId, "333333333@lid")            // jamais le JID du groupe
+        XCTAssertNil(m["AAA5"]?.authorDisplayName)
+        XCTAssertEqual(m["AAA2"]?.replyToSourceId, "AAA1")
+        XCTAssertNil(m["AAA1"]?.replyToSourceId)
+        XCTAssertEqual(m["AAA2"]?.reactionCount, 2)
+        XCTAssertEqual(m["AAA4"]?.kind, .system)
+        XCTAssertEqual(m["AAA5"]?.kind, .media)
+        XCTAssertEqual(m["AAA5"]?.mediaLabel, "image")
+        XCTAssertEqual(m["AAA1"]?.sentAt, FakeWhatsApp.t0)
+    }
+
+    func testCursorFollowsInsertionOrderNotDate() async throws {
+        let source = WhatsAppSource(databaseURL: dbURL)
+        var snap = try await source.snapshot()
+        let first = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
+        snap.close()
+        let cursor = SyncCursor(sequence: first.last!.sequence, date: first.last!.sentAt)
+        // Message reçu en retard : inséré après, mais daté d'avant le curseur.
+        try await writer.write { db in
+            try FakeWhatsApp.insert([.init(pk: 8, chat: 1, member: 2, minutes: -60, stanza: "AAA8", text: "Réponse tardive")], db)
+        }
+        snap = try await source.snapshot()
+        defer { snap.close() }
+        let next = try snap.fetchMessages(in: FakeWhatsApp.group, after: cursor, since: nil)
+        XCTAssertEqual(next.map(\.sourceId), ["AAA8"])
+    }
+
+    func testSchemaChangeIsReportedCleanly() async throws {
+        try await writer.write { db in try db.execute(sql: "ALTER TABLE ZWAMESSAGE RENAME COLUMN ZTEXT TO ZBODY") }
+        let source = WhatsAppSource(databaseURL: dbURL)
+        do {
+            _ = try await source.snapshot()
+            XCTFail("aurait dû échouer")
+        } catch let SourceError.schemaChanged(missing) {
+            XCTAssertEqual(missing, ["ZWAMESSAGE.ZTEXT"])
+        }
+        let status = await source.checkAvailability()
+        XCTAssertEqual(status, .schemaChanged(missing: ["ZWAMESSAGE.ZTEXT"]))
+    }
+
+    func testMissingDatabase() async {
+        let status = await WhatsAppSource(databaseURL: dir.appendingPathComponent("absent.sqlite")).checkAvailability()
+        XCTAssertEqual(status, .notInstalled)
+    }
+}
+
+final class ProtobufTests: XCTestCase {
+    func testNestedStrings() {
+        let blob = FakeWhatsApp.field(1, int: 7) + FakeWhatsApp.field(5, FakeWhatsApp.field(1, "ID") + FakeWhatsApp.field(2, "x@lid"))
+        let s = Protobuf.strings(blob)
+        XCTAssertEqual(s.map(\.path), ["5.1", "5.2"])
+        XCTAssertEqual(s.map(\.value), ["ID", "x@lid"])
+    }
+
+    func testGarbageIsIgnored() {
+        XCTAssertTrue(Protobuf.strings(Data([0xFF, 0xFF, 0xFF])).isEmpty)
+    }
+}
+
+final class PseudonymizerTests: XCTestCase {
+    func testMentionsPhonesEmailsButNotAmounts() {
+        let a = AuthorRecord(id: 1, conversationId: "c", sourceAuthorId: "111111111@lid", displayName: "Alice",
+                             aliasNumber: 3, mentionToken: "111111111")
+        let p = Pseudonymizer(authors: [1: a], enabled: true)
+        let s = p.clean("Merci @111111111 et @999999999, appelle le 06 12 34 56 78 ou +33 6 12 34 56 78, écris à a.b@c.fr. Prix : 1 250 000 €, 2 500 000.")
+        XCTAssertTrue(s.contains("@Membre 3"))
+        XCTAssertTrue(s.contains("@[membre]"))
+        XCTAssertFalse(s.contains("06 12"))
+        XCTAssertFalse(s.contains("+33"))
+        XCTAssertFalse(s.contains("a.b@c.fr"))
+        XCTAssertTrue(s.contains("1 250 000 €"))
+        XCTAssertTrue(s.contains("2 500 000"))
+        XCTAssertEqual(p.name(of: 1), "Membre 3")
+    }
+
+    func testDisabledKeepsNames() {
+        let a = AuthorRecord(id: 1, conversationId: "c", sourceAuthorId: "x@lid", displayName: "Alice", aliasNumber: 3, mentionToken: "x")
+        XCTAssertEqual(Pseudonymizer(authors: [1: a], enabled: false).name(of: 1), "Alice")
+    }
+}

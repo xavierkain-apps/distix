@@ -23,3 +23,10 @@ DerivedData/
 
 # Réglages locaux de Claude Code
 .claude/settings.local.json
+
+# Swift
+app/.build/
+.build/
+build/
+*.xcodeproj/xcuserdata/
+.swiftpm/
