@@ -212,6 +212,59 @@ final class PipelineTests: XCTestCase {
         XCTAssertFalse(c.isDue(globalIntervalHours: 0.25, now: now))
     }
 
+    func testWatchModeFindsOpportunitiesWithContact() async throws {
+        try FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        wa = try FakeWhatsApp.build(at: waURL, messages: [
+            .init(pk: 1, chat: 1, member: 2, minutes: 0, stanza: "A1", text: "Je cherche un T2 à Lyon pour novembre, 06 12 34 56 78"),
+            .init(pk: 2, chat: 1, member: 1, minutes: 1, stanza: "A2", text: "Bonne journée à tous"),
+            .init(pk: 3, chat: 1, member: 3, minutes: 2, stanza: "A3", text: "Je cherche une colocation"),
+        ])
+        let store = Store(try AppDatabase.inMemory())
+        let llm = StubLLM()
+        let engine = makeEngine(llm, store: store)
+        try await select(store, engine)
+        let id = ConversationRecord.makeId(source: "whatsapp", sourceId: FakeWhatsApp.group)
+
+        // Sans critères : rien n'est envoyé au modèle, les messages restent en attente.
+        try store.setGoal(id, mode: .watch, focus: "  ")
+        let empty = await engine.run(settings: settings)!
+        XCTAssertNil(empty.error)
+        XCTAssertEqual(llm.calls, [])
+        XCTAssertEqual(try store.statistics()["messages en attente de traitement"], 3)
+
+        try store.setGoal(id, mode: .watch, focus: "Je loue un T2 à Lyon.")
+        let summary = await engine.run(settings: settings)!
+        XCTAssertNil(summary.error)
+        XCTAssertEqual(summary.opportunities, 2)
+        XCTAssertEqual(summary.fichesCreated, 0)
+        XCTAssertEqual(llm.calls, ["veille"])
+        let opps = try store.opportunities(unreadOnly: true)
+        XCTAssertEqual(opps.count, 2)
+        // Coordonnées : numéro connu pour un membre @s.whatsapp.net, pas pour un @lid.
+        let byText = Dictionary(uniqueKeysWithValues: try opps.map { (try store.message($0.messageId)!.sourceId, $0) })
+        let bruno = try store.author(try store.message(byText["A1"]!.messageId)!.authorId)!
+        XCTAssertEqual(bruno.displayName, "Bruno")
+        XCTAssertEqual(bruno.phone, "+222222222")
+        XCTAssertNil(try store.author(try store.message(byText["A3"]!.messageId)!.authorId)!.phone)
+        // Le numéro présent dans le texte n'a pas été envoyé au modèle.
+        XCTAssertEqual(try store.unreadCounts()[id], 2)
+        try store.markOpportunityRead(opps[0].id!, read: true)
+        XCTAssertEqual(try store.opportunities(unreadOnly: true).count, 1)
+    }
+
+    func testFocusIsSentToTheModel() async throws {
+        let store = Store(try AppDatabase.inMemory())
+        let llm = RecordingLLM(base: StubLLM())
+        let engine = SyncEngine(store: store, source: WhatsAppSource(databaseURL: waURL), embedder: StubEmbedder(), provider: llm)
+        try await select(store, engine)
+        try store.setGoal(ConversationRecord.makeId(source: "whatsapp", sourceId: FakeWhatsApp.group), mode: .knowledge,
+                          focus: "Surtout le financement.")
+        _ = await engine.run(settings: settings)
+        XCTAssertFalse(llm.prompts.isEmpty)
+        XCTAssertTrue(llm.prompts.filter { !$0.contains("FICHE A") }.allSatisfy { $0.contains("Surtout le financement.") })
+    }
+
     func testSkippedThreadsAreCountedWithReason() async throws {
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

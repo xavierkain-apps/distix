@@ -14,7 +14,8 @@ final class StubLLM: LLMProvider, @unchecked Sendable {
 
     func complete(_ request: LLMRequest) async throws -> (json: Data, usage: LLMUsage) {
         let count: Int = lock.withLock {
-            calls.append(request.system.hasPrefix("Tu aides") ? "attribution" : request.system.hasPrefix("Tu rédiges") ? "fiche" : "fusion")
+            calls.append(request.system.hasPrefix("Tu aides") ? "attribution" : request.system.hasPrefix("Tu rédiges") ? "fiche"
+                         : request.system.hasPrefix("Tu fais de la veille") ? "veille" : "fusion")
             return calls.count
         }
         if let failAfter, count > failAfter { throw LLMError.http(400, "panne simulée") }
@@ -22,6 +23,13 @@ final class StubLLM: LLMProvider, @unchecked Sendable {
         let user = request.user
         if request.system.hasPrefix("Tu aides") {
             return (try JSONSerialization.data(withJSONObject: attribution(user)), usage)
+        } else if request.system.hasPrefix("Tu fais de la veille") {
+            // Règle : un message contenant « cherche » correspond, score 80.
+            let lines = (user.components(separatedBy: "MESSAGES À EXAMINER\n").last ?? "").components(separatedBy: "\n")
+            let matches = lines.filter { $0.hasPrefix("[m") && $0.contains("cherche") }.map { line -> [String: Any] in
+                ["message": String(line.dropFirst().prefix { $0 != "]" }), "score": 80, "summary": "Besoin", "reason": "Correspond"]
+            }
+            return (try JSONSerialization.data(withJSONObject: ["matches": matches]), usage)
         } else if request.system.hasPrefix("Tu rédiges") {
             return (try JSONSerialization.data(withJSONObject: fiche(user)), usage)
         } else {
@@ -75,5 +83,18 @@ final class StubLLM: LLMProvider, @unchecked Sendable {
 struct StubEmbedder: EmbeddingProvider {
     func embed(_ texts: [String]) async throws -> [[Float]] {
         texts.map { NaturalLanguageEmbedder.hashed(String($0.split(separator: "\n").first ?? "")) }
+    }
+}
+
+/// Enregistre les prompts envoyés, puis délègue.
+final class RecordingLLM: LLMProvider, @unchecked Sendable {
+    let base: StubLLM
+    var prompts: [String] = []
+    private let lock = NSLock()
+    init(base: StubLLM) { self.base = base; base.sameSubject = false }
+    var displayName: String { "recording" }
+    func complete(_ request: LLMRequest) async throws -> (json: Data, usage: LLMUsage) {
+        lock.withLock { prompts.append(request.user) }
+        return try await base.complete(request)
     }
 }

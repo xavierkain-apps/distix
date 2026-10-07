@@ -62,6 +62,14 @@ enum WhatsAppSchema {
     /// Exclus du décompte des groupes affiché à l'utilisateur.
     static let noContentTypes = "6, 10, 14"
 
+    /// Un JID « numéro@s.whatsapp.net » contient le numéro ; un « …@lid » non (voir
+    /// docs/schema-whatsapp.md, la correspondance LID -> numéro reste à établir).
+    static func phone(fromJid jid: String) -> String? {
+        guard jid.hasSuffix("@s.whatsapp.net"), let user = jid.split(separator: "@").first,
+              user.allSatisfy(\.isNumber), user.count >= 8 else { return nil }
+        return "+" + user
+    }
+
     static func kind(of type: Int) -> (MessageKind, String?) {
         switch type {
         case 0, 7: return (.text, nil)
@@ -237,7 +245,8 @@ final class WhatsAppSnapshot: SourceSnapshot {
         try db().read { db in
             let chat = try chatPK(db, conversationId)
             return try members(db, chat: chat).values.map { jid, name in
-                SourceAuthor(id: jid, displayName: name, mentionToken: jid.split(separator: "@").first.map(String.init))
+                SourceAuthor(id: jid, displayName: name, mentionToken: jid.split(separator: "@").first.map(String.init),
+                             phone: WhatsAppSchema.phone(fromJid: jid))
             }
         }
     }

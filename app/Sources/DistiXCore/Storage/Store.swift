@@ -5,6 +5,7 @@ extension MessageKind: DatabaseValueConvertible {}
 extension ThreadRecord.State: DatabaseValueConvertible {}
 extension FicheStatus: DatabaseValueConvertible {}
 extension ReadState: DatabaseValueConvertible {}
+extension GroupMode: DatabaseValueConvertible {}
 
 public extension Notification.Name {
     /// Émise après toute écriture visible dans l'interface.
@@ -54,7 +55,7 @@ public final class Store: @unchecked Sendable {
                     try ConversationRecord(id: id, source: source, sourceId: c.id, name: c.name, selected: false,
                                            messageCount: c.messageCount, lastMessageAt: c.lastMessageAt,
                                            historyStart: nil, cursorSequence: nil, cursorDate: nil,
-                                           lastSyncedAt: nil, syncIntervalHours: nil).insert(db)
+                                           lastSyncedAt: nil, syncIntervalHours: nil, mode: .knowledge, focus: nil).insert(db)
                 }
             }
         }
@@ -90,6 +91,71 @@ public final class Store: @unchecked Sendable {
         }
     }
 
+    public func setGoal(_ id: String, mode: GroupMode, focus: String?) throws {
+        let clean = focus?.trimmingCharacters(in: .whitespacesAndNewlines)
+        try writer.write { db in
+            try db.execute(sql: "UPDATE conversations SET mode = ?, focus = ? WHERE id = ?",
+                           arguments: [mode, clean?.isEmpty == false ? clean : nil, id])
+        }
+        notify()
+    }
+
+    // MARK: Opportunités (mode veille)
+
+    public func saveOpportunities(_ list: [OpportunityRecord], markAttributed messageIds: [Int64]) throws {
+        try writer.write { db in
+            for var o in list { try o.insert(db, onConflict: .ignore) }
+            _ = try MessageRecord.filter(messageIds.contains(Column("id"))).updateAll(db, Column("attributed").set(to: true))
+        }
+        if !list.isEmpty { notify() }
+    }
+
+    public func opportunities(conversationId: String? = nil, unreadOnly: Bool = false,
+                              search: String? = nil) throws -> [OpportunityRecord] {
+        try writer.read { db in
+            var r = OpportunityRecord.all()
+            if let c = conversationId { r = r.filter(Column("conversationId") == c) }
+            if unreadOnly { r = r.filter(Column("readAt") == nil) }
+            if let text = search?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+                let ids = try Int64.fetchAll(db, sql: """
+                    SELECT o.id FROM opportunities o JOIN messages m ON m.id = o.messageId
+                    WHERE o.summary LIKE ? OR o.reason LIKE ? OR m.text LIKE ?
+                    """, arguments: Array(repeating: "%\(text)%", count: 3))
+                r = r.filter(ids.contains(Column("id")))
+            }
+            return try r.order(Column("sentAt").desc).fetchAll(db)
+        }
+    }
+
+    public func opportunity(_ id: Int64) throws -> OpportunityRecord? {
+        try writer.read { db in try OpportunityRecord.fetchOne(db, key: id) }
+    }
+
+    public func message(_ id: Int64) throws -> MessageRecord? {
+        try writer.read { db in try MessageRecord.fetchOne(db, key: id) }
+    }
+
+    /// Messages voisins (même conversation) pour donner le contexte d'une opportunité.
+    public func messagesAround(_ message: MessageRecord, before: Int, after: Int) throws -> [MessageRecord] {
+        try writer.read { db in
+            let prev = try MessageRecord.filter(Column("conversationId") == message.conversationId
+                                                && Column("sentAt") < message.sentAt && Column("kind") != "system")
+                .order(Column("sentAt").desc).limit(before).fetchAll(db).reversed()
+            let next = try MessageRecord.filter(Column("conversationId") == message.conversationId
+                                                && Column("sentAt") > message.sentAt && Column("kind") != "system")
+                .order(Column("sentAt")).limit(after).fetchAll(db)
+            return Array(prev) + [message] + next
+        }
+    }
+
+    public func markOpportunityRead(_ id: Int64, read: Bool) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE opportunities SET readAt = \(read ? "COALESCE(readAt, ?)" : "NULL") WHERE id = ?",
+                           arguments: read ? [Date(), id] : [id])
+        }
+        notify()
+    }
+
     public func setSyncInterval(_ id: String, hours: Double?) throws {
         try writer.write { db in
             try db.execute(sql: "UPDATE conversations SET syncIntervalHours = ? WHERE id = ?", arguments: [hours, id])
@@ -106,7 +172,7 @@ public final class Store: @unchecked Sendable {
             for f in ficheIds {
                 try db.execute(sql: "DELETE FROM fiches_fts WHERE ficheId = ?", arguments: [f])
             }
-            for table in ["fiches", "threads", "messages", "authors", "themes"] {
+            for table in ["opportunities", "fiches", "threads", "messages", "authors", "themes"] {
                 try db.execute(sql: "DELETE FROM \(table) WHERE conversationId = ?", arguments: [conversationId])
             }
             try db.execute(sql: """
@@ -128,24 +194,25 @@ public final class Store: @unchecked Sendable {
             var authorIds: [String: Int64] = [:]
             var nextAlias = (try Int.fetchOne(db, sql: "SELECT MAX(aliasNumber) FROM authors WHERE conversationId = ?",
                                                arguments: [conversationId]) ?? 0) + 1
-            func authorId(_ sourceId: String, name: String?, token: String?) throws -> Int64 {
+            func authorId(_ sourceId: String, name: String?, token: String?, phone: String? = nil) throws -> Int64 {
                 if let id = authorIds[sourceId] { return id }
                 if var a = try AuthorRecord.filter(Column("conversationId") == conversationId
                                                    && Column("sourceAuthorId") == sourceId).fetchOne(db) {
                     if let name, name != a.displayName { a.displayName = name; try a.update(db) }
                     if a.mentionToken == nil, let token { a.mentionToken = token; try a.update(db) }
+                    if a.phone == nil, let phone { a.phone = phone; try a.update(db) }
                     authorIds[sourceId] = a.id!
                     return a.id!
                 }
                 var a = AuthorRecord(id: nil, conversationId: conversationId, sourceAuthorId: sourceId,
                                      displayName: name, aliasNumber: sourceId == "me" ? 0 : nextAlias,
-                                     mentionToken: token)
+                                     mentionToken: token, phone: phone)
                 if sourceId != "me" { nextAlias += 1 }
                 try a.insert(db)
                 authorIds[sourceId] = a.id!
                 return a.id!
             }
-            for a in authors { _ = try authorId(a.id, name: a.displayName, token: a.mentionToken) }
+            for a in authors { _ = try authorId(a.id, name: a.displayName, token: a.mentionToken, phone: a.phone) }
             var inserted = 0
             for m in messages {
                 let aid = try authorId(m.authorId, name: m.authorDisplayName, token: nil)
@@ -167,6 +234,10 @@ public final class Store: @unchecked Sendable {
             }
             return inserted
         }
+    }
+
+    public func author(_ id: Int64) throws -> AuthorRecord? {
+        try writer.read { db in try AuthorRecord.fetchOne(db, key: id) }
     }
 
     public func authors(in conversationId: String) throws -> [Int64: AuthorRecord] {
@@ -498,7 +569,12 @@ public final class Store: @unchecked Sendable {
     public func unreadCounts() throws -> [String: Int] {
         try writer.read { db in
             var out: [String: Int] = [:]
-            for row in try Row.fetchAll(db, sql: "SELECT conversationId, COUNT(*) AS n FROM fiches WHERE readAt IS NULL GROUP BY 1") {
+            for row in try Row.fetchAll(db, sql: """
+                SELECT conversationId, COUNT(*) AS n FROM (
+                    SELECT conversationId FROM fiches WHERE readAt IS NULL
+                    UNION ALL SELECT conversationId FROM opportunities WHERE readAt IS NULL)
+                GROUP BY 1
+                """) {
                 out[row["conversationId"]] = row["n"]
             }
             return out
@@ -533,11 +609,13 @@ public final class Store: @unchecked Sendable {
 
     public func markAllRead(conversationId: String? = nil) throws {
         try writer.write { db in
-            if let conversationId {
-                try db.execute(sql: "UPDATE fiches SET readAt = ? WHERE readAt IS NULL AND conversationId = ?",
-                               arguments: [Date(), conversationId])
-            } else {
-                try db.execute(sql: "UPDATE fiches SET readAt = ? WHERE readAt IS NULL", arguments: [Date()])
+            for table in ["fiches", "opportunities"] {
+                if let conversationId {
+                    try db.execute(sql: "UPDATE \(table) SET readAt = ? WHERE readAt IS NULL AND conversationId = ?",
+                                   arguments: [Date(), conversationId])
+                } else {
+                    try db.execute(sql: "UPDATE \(table) SET readAt = ? WHERE readAt IS NULL", arguments: [Date()])
+                }
             }
         }
         notify()
@@ -607,6 +685,7 @@ public final class Store: @unchecked Sendable {
                              ("fiches issues d'une fusion",
                               "SELECT COUNT(DISTINCT ficheId) FROM fiche_threads WHERE mergedFromFicheId IS NOT NULL"),
                              ("thèmes", "SELECT COUNT(*) FROM themes"),
+                             ("opportunités (veille)", "SELECT COUNT(*) FROM opportunities"),
                              ("fiches non lues", "SELECT COUNT(*) FROM fiches WHERE readAt IS NULL")] {
                 out[k] = try Int.fetchOne(db, sql: sql) ?? 0
             }

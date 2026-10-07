@@ -146,6 +146,29 @@ public final class AppDatabase: @unchecked Sendable {
             // Fréquence de synchronisation propre au groupe (heures) ; nil = réglage global.
             try db.alter(table: "conversations") { t in t.add(column: "syncIntervalHours", .double) }
         }
+        m.registerMigration("v4") { db in
+            // Objectif du groupe : base de connaissances (fiches) ou veille (opportunités),
+            // et consignes libres de l'utilisateur.
+            try db.alter(table: "conversations") { t in
+                t.add(column: "mode", .text).notNull().defaults(to: "knowledge")
+                t.add(column: "focus", .text)
+            }
+            try db.create(table: "opportunities") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("conversationId", .text).notNull().references("conversations", onDelete: .cascade)
+                t.column("messageId", .integer).notNull().unique().references("messages", onDelete: .cascade)
+                t.column("score", .integer).notNull()
+                t.column("summary", .text).notNull()
+                t.column("reason", .text).notNull()
+                t.column("sentAt", .datetime).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("readAt", .datetime)
+            }
+            try db.alter(table: "sync_runs") { t in
+                t.add(column: "opportunities", .integer).notNull().defaults(to: 0)
+            }
+            try db.alter(table: "authors") { t in t.add(column: "phone", .text) }
+        }
         return m
     }
 }

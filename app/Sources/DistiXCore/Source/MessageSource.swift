@@ -74,9 +74,12 @@ public struct SourceAuthor: Equatable, Sendable {
     /// Forme que prend une mention de cet auteur dans le texte (« 3361234 » pour
     /// « @3361234 »), si la source utilise ce mécanisme.
     public let mentionToken: String?
+    /// Numéro de téléphone (format international, « +33… ») s'il est connu : sert à
+    /// contacter la personne en privé. Jamais envoyé à l'IA.
+    public let phone: String?
 
-    public init(id: String, displayName: String?, mentionToken: String?) {
-        self.id = id; self.displayName = displayName; self.mentionToken = mentionToken
+    public init(id: String, displayName: String?, mentionToken: String?, phone: String? = nil) {
+        self.id = id; self.displayName = displayName; self.mentionToken = mentionToken; self.phone = phone
     }
 }
 

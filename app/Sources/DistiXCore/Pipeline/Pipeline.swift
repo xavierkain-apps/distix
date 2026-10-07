@@ -5,6 +5,7 @@ public struct PipelineStats: Sendable, Equatable {
     public var fichesCreated = 0
     public var fichesUpdated = 0
     public var merges = 0
+    public var opportunities = 0
     public var messagesProcessed = 0
     public var threadsSkipped = 0
     public var usage = LLMUsage()
@@ -33,9 +34,15 @@ public final class Pipeline: @unchecked Sendable {
 
     public func process(conversationId: String, progress: @Sendable (String) -> Void = { _ in }) async throws {
         let pseudo = try pseudonymizer(for: [conversationId])
-        let attributor = ThreadAttributor(store: store, provider: provider, settings: settings)
+        let conversation = try store.conversation(conversationId)
         let total = try store.pendingCount(in: conversationId)
         stats.messagesProcessed += total
+        if conversation?.mode == .watch {
+            try await watch(conversationId: conversationId, criteria: conversation?.focus ?? "",
+                            pseudo: pseudo, total: total, progress: progress)
+            return
+        }
+        let attributor = ThreadAttributor(store: store, provider: provider, settings: settings)
         while true {
             try Task.checkCancellation()
             let left = try store.pendingCount(in: conversationId)
@@ -43,10 +50,32 @@ public final class Pipeline: @unchecked Sendable {
                 progress(String(localized: "Reconstitution des fils : \(total - left)/\(total) messages", bundle: CoreResources.bundle))
             }
             guard try await attributor.processWindow(conversationId: conversationId, pseudo: pseudo,
-                                                     usage: &stats.usage) else { break }
+                                                     focus: conversation?.focus, usage: &stats.usage) else { break }
             stats.windows += 1
         }
         try await writeFiches(conversationId: conversationId, pseudo: pseudo, progress: progress)
+    }
+
+    /// Mode veille : sans critères, rien n'est envoyé au modèle et les messages restent en attente.
+    private func watch(conversationId: String, criteria: String, pseudo: Pseudonymizer, total: Int,
+                       progress: @Sendable (String) -> Void) async throws {
+        guard !criteria.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            stats.messagesProcessed -= total
+            progress(String(localized: "Veille : critères non renseignés, groupe ignoré", bundle: CoreResources.bundle))
+            return
+        }
+        let finder = OpportunityFinder(store: store, provider: provider, settings: settings)
+        while true {
+            try Task.checkCancellation()
+            let left = try store.pendingCount(in: conversationId)
+            if left > 0 {
+                progress(String(localized: "Veille : \(total - left)/\(total) messages examinés", bundle: CoreResources.bundle))
+            }
+            guard let found = try await finder.processWindow(conversationId: conversationId, criteria: criteria,
+                                                              pseudo: pseudo, usage: &stats.usage) else { break }
+            stats.opportunities += found
+            stats.windows += 1
+        }
     }
 
     private enum Job: Sendable {

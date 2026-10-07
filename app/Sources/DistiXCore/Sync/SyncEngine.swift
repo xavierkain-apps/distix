@@ -5,6 +5,7 @@ public struct SyncSummary: Sendable, Equatable {
     public var fichesCreated = 0
     public var fichesUpdated = 0
     public var merges = 0
+    public var opportunities = 0
     public var messagesProcessed = 0
     public var threadsSkipped = 0
     public var usage = LLMUsage()
@@ -78,6 +79,7 @@ public actor SyncEngine {
                     summary.fichesCreated = pipeline.stats.fichesCreated
                     summary.fichesUpdated = pipeline.stats.fichesUpdated
                     summary.merges = pipeline.stats.merges
+                    summary.opportunities = pipeline.stats.opportunities
                     summary.messagesProcessed = pipeline.stats.messagesProcessed
                     summary.threadsSkipped = pipeline.stats.threadsSkipped
                     summary.usage = pipeline.stats.usage
@@ -87,6 +89,7 @@ public actor SyncEngine {
             summary.fichesCreated = pipeline.stats.fichesCreated
             summary.fichesUpdated = pipeline.stats.fichesUpdated
             summary.merges = pipeline.stats.merges
+            summary.opportunities = pipeline.stats.opportunities
             summary.messagesProcessed = pipeline.stats.messagesProcessed
             summary.threadsSkipped = pipeline.stats.threadsSkipped
             summary.usage = pipeline.stats.usage
@@ -100,6 +103,7 @@ public actor SyncEngine {
             r.fichesCreated = summary.fichesCreated
             r.fichesUpdated = summary.fichesUpdated
             r.merges = summary.merges
+            r.opportunities = summary.opportunities
             r.messagesProcessed = summary.messagesProcessed
             r.threadsSkipped = summary.threadsSkipped
             r.inputTokens = summary.usage.inputTokens

@@ -56,6 +56,7 @@ struct FicheWriter {
 
     func write(conversationId: String, threadIds: [Int64], previous: FicheContent?,
                pseudo: Pseudonymizer, usage: inout LLMUsage) async throws -> Result {
+        let focus = try store.conversation(conversationId)?.focus
         var messages = try store.messages(ofThreads: threadIds)
         if messages.count > Self.maxMessages {
             messages = Array(messages.prefix(30)) + Array(messages.suffix(Self.maxMessages - 30))
@@ -68,7 +69,11 @@ struct FicheWriter {
             sourceOfKey["m\(i + 1)"] = m.sourceId
         }
         let themes = try store.themes(in: conversationId).map(\.name)
-        var prompt = "THÈMES EXISTANTS : " + (themes.isEmpty ? "(aucun, propose-en un)" : themes.joined(separator: ", ")) + "\n\n"
+        var prompt = ""
+        if let focus, !focus.isEmpty {
+            prompt += "CONSIGNES DE L'UTILISATEUR POUR CE GROUPE (ce qui l'intéresse ; elles priment pour décider is_knowledge et ce que la fiche met en avant)\n\(focus)\n\n"
+        }
+        prompt += "THÈMES EXISTANTS : " + (themes.isEmpty ? "(aucun, propose-en un)" : themes.joined(separator: ", ")) + "\n\n"
         if let previous {
             // La version précédente référence des identifiants source : on les traduit.
             var p = previous

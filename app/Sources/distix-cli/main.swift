@@ -13,6 +13,9 @@ let usage = """
                                       coche le groupe (--all : tous ceux qui contiennent ce texte)
       unselect "<morceau du nom>"     décoche (sans supprimer les données)
       forget "<morceau du nom>"       décoche et supprime les données locales du groupe
+      goal "<nom>" --mode knowledge|watch [--focus "consignes"]
+                                      objectif du groupe (fiches ou veille) et consignes pour l'IA
+      opportunities                   opportunités repérées en veille (contenu : local uniquement)
       sync [--provider claudeCode|anthropic|openAICompatible]
                                       synchronise les groupes cochés
       stats                           volumes et coûts, sans aucun contenu
@@ -45,6 +48,8 @@ let providerName = option("--provider")
 let since = option("--since")
 let includeSources = flag("--sources")
 let all = flag("--all")
+let modeName = option("--mode")
+let focusText = option("--focus")
 
 /// Groupes désignés par un nom exact, un JID ou un morceau de nom. Un morceau qui
 /// désigne plusieurs groupes est refusé, sauf avec --all.
@@ -101,6 +106,20 @@ do {
             print("données supprimées : \(c.name)")
         }
 
+    case "goal":
+        guard args.count >= 2, let modeName, let mode = GroupMode(rawValue: modeName) else { fail(usage) }
+        for c in matching(args[1], in: try store.conversations()) {
+            try store.setGoal(c.id, mode: mode, focus: focusText)
+            print("objectif de \(c.name) : \(mode.rawValue)\(focusText.map { ", consignes : \($0)" } ?? "")")
+        }
+
+    case "opportunities":
+        for o in try store.opportunities() {
+            let m = try store.message(o.messageId)
+            let a = try m.flatMap { try store.author($0.authorId) }
+            print("[\(o.score)] \(o.summary)\n    \(a?.displayName ?? a?.alias ?? "?")\(a?.phone.map { " · \($0)" } ?? "") — \(o.reason)")
+        }
+
     case "sync":
         let started = Date()
         guard let summary = await engine.run(settings: settings, progress: { err($0) }) else {
@@ -110,6 +129,7 @@ do {
         print("""
             Messages lus dans WhatsApp : \(summary.messagesRead), traités : \(summary.messagesProcessed)
             Fils écartés (pas de fiche) : \(summary.threadsSkipped)
+            Opportunités (veille) : \(summary.opportunities)
             Fiches créées : \(summary.fichesCreated), mises à jour : \(summary.fichesUpdated), fusions : \(summary.merges)
             Jetons : \(summary.usage.inputTokens) en entrée, \(summary.usage.outputTokens) en sortie
             Coût (ou équivalent tarif API) : \(String(format: "%.3f", summary.usage.costUSD)) $

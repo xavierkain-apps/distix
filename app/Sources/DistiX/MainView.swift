@@ -13,7 +13,9 @@ struct MainView: View {
             FicheListView()
                 .navigationSplitViewColumnWidth(min: 300, ideal: 380)
         } detail: {
-            if let fiche = model.selectedFiche {
+            if let o = model.selectedOpportunity {
+                OpportunityDetailView(opportunity: o)
+            } else if let fiche = model.selectedFiche {
                 FicheDetailView(fiche: fiche)
             } else {
                 ContentUnavailableView(L("Aucune fiche sélectionnée"), systemImage: "text.book.closed",
@@ -37,6 +39,9 @@ struct MainView: View {
                         .help(L("Synchroniser maintenant"))
                 }
             }
+        }
+        .sheet(item: $model.editingGoal) { c in
+            GroupGoalSheet(conversation: c).environment(model)
         }
         .sheet(isPresented: $model.showGroups) {
             GroupsSheet().environment(model)
@@ -64,17 +69,18 @@ struct SidebarView: View {
             Section {
                 ForEach(model.selectedConversations) { c in
                     DisclosureGroup {
-                        ForEach(model.themes[c.id] ?? []) { t in
+                        ForEach(c.mode == .watch ? [] : model.themes[c.id] ?? []) { t in
                             Text(t.name)
                                 .badge(model.themeUnread[t.id!] ?? 0)
                                 .tag(SidebarItem.theme(c.id, t.id!))
                                 .contextMenu { themeMenu(t, in: c.id) }
                         }
                     } label: {
-                        Label(c.name, systemImage: c.syncIntervalHours == nil ? "person.3" : "person.3.sequence")
+                        Label(c.name, systemImage: c.mode == .watch ? "binoculars" : (c.syncIntervalHours == nil ? "person.3" : "person.3.sequence"))
                             .badge(model.unread[c.id] ?? 0)
                             .tag(SidebarItem.group(c.id))
                             .contextMenu {
+                                Button(L("Objectif du groupe…")) { model.editingGoal = c }
                                 Button(L("Gérer les groupes…")) { model.showGroups = true }
                                 Button(L("Exporter ce groupe…")) { model.exportFolder(conversationId: c.id) }
                                 Button(L("Tout marquer comme lu")) { try? model.store.markAllRead(conversationId: c.id) }
@@ -146,16 +152,31 @@ struct FicheListView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(model.fiches, selection: $model.selectedFicheId) { f in
-            FicheRow(fiche: f).tag(f.id)
+        List(selection: $model.selectedFicheId) {
+            if !model.opportunities.isEmpty {
+                Section(L("Opportunités")) {
+                    ForEach(model.opportunities) { o in OpportunityRow(opportunity: o).tag(AppModel.itemId(o)) }
+                }
+            }
+            if !model.fiches.isEmpty {
+                Section(model.opportunities.isEmpty ? "" : L("Fiches")) {
+                    ForEach(model.fiches) { f in FicheRow(fiche: f).tag(f.id) }
+                }
+            }
         }
         .overlay {
-            if model.fiches.isEmpty {
+            if model.fiches.isEmpty && model.opportunities.isEmpty {
                 if !model.searchText.isEmpty {
                     ContentUnavailableView.search(text: model.searchText)
                 } else if model.sidebar == .news {
                     ContentUnavailableView(L("Rien de nouveau"), systemImage: "checkmark.circle",
                                            description: Text(L("Les nouvelles questions et les fiches mises à jour apparaîtront ici.")))
+                } else if case .group(let id)? = model.sidebar, let c = model.conversations.first(where: { $0.id == id }),
+                          c.mode == .watch {
+                    ContentUnavailableView(L("Aucune opportunité pour l'instant"), systemImage: "binoculars",
+                                           description: Text((c.focus ?? "").isEmpty
+                                                ? L("Renseignez vos critères : clic droit sur le groupe, « Objectif du groupe… ».")
+                                                : L("Les messages qui correspondent à vos critères apparaîtront ici.")))
                 } else if case .group(let id)? = model.sidebar, model.usableCount(id) == 0,
                           model.conversations.first(where: { $0.id == id })?.lastSyncedAt != nil {
                     ContentUnavailableView(L("Aucun message exploitable"), systemImage: "text.badge.xmark",
@@ -176,7 +197,7 @@ struct FicheListView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                if model.sidebar == .news && !model.fiches.isEmpty {
+                if model.sidebar == .news && !(model.fiches.isEmpty && model.opportunities.isEmpty) {
                     Button(L("Tout marquer comme lu")) { model.markAllRead() }
                 }
             }
@@ -249,7 +270,7 @@ struct GroupsSheet: View {
             Text(L("Groupes suivis")).font(.title2.bold())
             Text(L("Cochez les groupes à transformer en fiches. La profondeur d'historique s'applique aux groupes que vous cochez maintenant ; l'élargir pour un groupe déjà suivi récupère les messages plus anciens."))
                 .font(.callout).foregroundStyle(.secondary)
-            GroupPicker(depth: $depth, confirmUnselect: true)
+            GroupPicker(depth: $depth, confirmUnselect: true, showGoal: true)
             HStack {
                 Button(L("Actualiser la liste")) { Task { _ = await model.refreshGroups() } }
                 Spacer()
@@ -265,5 +286,8 @@ struct GroupsSheet: View {
         .padding(24)
         .frame(width: 640, height: 560)
         .task { _ = await model.refreshGroups() }
+        .sheet(item: Binding(get: { model.editingGoal }, set: { model.editingGoal = $0 })) { c in
+            GroupGoalSheet(conversation: c).environment(model)
+        }
     }
 }

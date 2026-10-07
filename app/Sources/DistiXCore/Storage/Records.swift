@@ -18,6 +18,9 @@ public struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, I
     public var lastSyncedAt: Date?
     /// Fréquence propre au groupe, en heures ; nil = réglage global.
     public var syncIntervalHours: Double?
+    public var mode: GroupMode = .knowledge
+    /// Consignes de l'utilisateur pour ce groupe (centres d'intérêt, critères de veille).
+    public var focus: String?
 
     /// Le groupe doit-il être synchronisé maintenant ?
     public func isDue(globalIntervalHours: Double, now: Date = Date()) -> Bool {
@@ -26,6 +29,34 @@ public struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, I
     }
 
     public static func makeId(source: String, sourceId: String) -> String { "\(source):\(sourceId)" }
+}
+
+/// Ce que l'utilisateur attend d'un groupe.
+public enum GroupMode: String, Codable, CaseIterable, Sendable {
+    /// Fiches questions-réponses classées par thème.
+    case knowledge
+    /// Seuls les messages qui correspondent aux critères de l'utilisateur, en opportunités.
+    case watch
+}
+
+/// Message repéré en mode veille.
+public struct OpportunityRecord: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Hashable, Sendable {
+    public static let databaseTableName = "opportunities"
+    public var id: Int64?
+    public var conversationId: String
+    public var messageId: Int64
+    /// Adéquation aux critères, de 0 à 100.
+    public var score: Int
+    /// Ce que la personne propose ou cherche, en une phrase.
+    public var summary: String
+    /// Pourquoi cela correspond (ou ce qui coince).
+    public var reason: String
+    public var sentAt: Date
+    public var createdAt: Date
+    public var readAt: Date?
+
+    public var isUnread: Bool { readAt == nil }
+    public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
 
 public struct AuthorRecord: Codable, FetchableRecord, MutablePersistableRecord, Hashable, Sendable {
@@ -37,6 +68,8 @@ public struct AuthorRecord: Codable, FetchableRecord, MutablePersistableRecord, 
     /// Numéro d'alias stable dans la conversation : « Membre 12 ».
     public var aliasNumber: Int
     public var mentionToken: String?
+    /// Numéro pour un contact privé ; local uniquement.
+    public var phone: String?
 
     public var alias: String {
         sourceAuthorId == "me" ? String(localized: "Moi", bundle: CoreResources.bundle)
@@ -146,6 +179,7 @@ public struct SyncRunRecord: Codable, FetchableRecord, MutablePersistableRecord,
     public var fichesCreated: Int = 0
     public var fichesUpdated: Int = 0
     public var merges: Int = 0
+    public var opportunities: Int = 0
     public var messagesProcessed: Int = 0
     public var threadsSkipped: Int = 0
     public var inputTokens: Int = 0

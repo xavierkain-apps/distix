@@ -19,7 +19,8 @@ struct ThreadAttributor {
     ])
 
     /// Traite une fenêtre. Renvoie false s'il n'y avait plus rien à traiter.
-    func processWindow(conversationId: String, pseudo: Pseudonymizer, usage: inout LLMUsage) async throws -> Bool {
+    func processWindow(conversationId: String, pseudo: Pseudonymizer, focus: String? = nil,
+                       usage: inout LLMUsage) async throws -> Bool {
         let pending = try store.pendingMessages(in: conversationId, limit: settings.windowSize)
         guard let first = pending.first else { return false }
         let context = try store.contextMessages(in: conversationId, before: first.sentAt, limit: settings.windowOverlap)
@@ -45,7 +46,11 @@ struct ThreadAttributor {
         var threadOfSource: [String: Int64] = [:]
         for m in cited { if let t = citedThreads[m.id!] { threadOfSource[m.sourceId] = t } }
 
-        var prompt = "FILS OUVERTS\n"
+        var prompt = ""
+        if let focus, !focus.isEmpty {
+            prompt += "CONSIGNES DE L'UTILISATEUR POUR CE GROUPE (prioritaires sur les règles générales pour décider ce qui mérite un fil)\n\(focus)\n\n"
+        }
+        prompt += "FILS OUVERTS\n"
         if open.isEmpty { prompt += "(aucun)\n" }
         for t in open {
             prompt += "[T\(t.id!)] dernier message \(MessageFormatter.dateFormat.string(from: t.lastMessageAt)) — \(t.summary)\n"

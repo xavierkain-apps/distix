@@ -36,7 +36,10 @@ final class AppModel {
     var statusFilter: FicheStatus? { didSet { reloadFiches() } }
     var searchText = "" { didSet { reloadFiches() } }
     var fiches: [FicheRecord] = []
-    var selectedFicheId: String? { didSet { openedFiche() } }
+    var opportunities: [OpportunityRecord] = []
+    /// Élément sélectionné : identifiant de fiche, ou « o-<id> » pour une opportunité.
+    var selectedFicheId: String? { didSet { openedItem() } }
+    var editingGoal: ConversationRecord?
     var isSyncing = false
     var syncProgress: String?
     var lastRun: SyncRunRecord?
@@ -106,21 +109,104 @@ final class AppModel {
             list = (list + kept).sorted { $0.lastMessageAt > $1.lastMessageAt }
         }
         fiches = list
+        // Opportunités (mode veille) : pas de thème, pas de statut.
+        var opps: [OpportunityRecord] = []
+        if q.themeId == nil && statusFilter == nil {
+            opps = (try? store.opportunities(conversationId: q.conversationId, unreadOnly: q.unreadOnly, search: q.search)) ?? []
+            if q.unreadOnly {
+                let kept = sessionRead.compactMap(Self.opportunityId).compactMap { try? store.opportunity($0) }
+                    .filter { o in !opps.contains { $0.id == o.id } }
+                opps = (opps + kept).sorted { $0.sentAt > $1.sentAt }
+            }
+        }
+        opportunities = opps
+    }
+
+    static func itemId(_ o: OpportunityRecord) -> String { "o-\(o.id!)" }
+    static func opportunityId(_ itemId: String) -> Int64? {
+        itemId.hasPrefix("o-") ? Int64(itemId.dropFirst(2)) : nil
+    }
+
+    var selectedOpportunity: OpportunityRecord? {
+        selectedFicheId.flatMap(Self.opportunityId).flatMap { id in opportunities.first { $0.id == id } ?? (try? store.opportunity(id)) }
     }
 
     var selectedFiche: FicheRecord? {
-        selectedFicheId.flatMap { id in fiches.first { $0.id == id } ?? (try? store.fiche(id)) }
+        guard let id = selectedFicheId, Self.opportunityId(id) == nil else { return nil }
+        return fiches.first { $0.id == id } ?? (try? store.fiche(id))
     }
 
-    private func openedFiche() {
-        guard let id = selectedFicheId, let f = try? store.fiche(id), f.isUnread else { return }
-        sessionRead.insert(id)
-        try? store.markRead(id, read: true)
+    private func openedItem() {
+        guard let id = selectedFicheId else { return }
+        if let oid = Self.opportunityId(id) {
+            guard let o = try? store.opportunity(oid), o.isUnread else { return }
+            sessionRead.insert(id)
+            try? store.markOpportunityRead(oid, read: true)
+        } else {
+            guard let f = try? store.fiche(id), f.isUnread else { return }
+            sessionRead.insert(id)
+            try? store.markRead(id, read: true)
+        }
     }
 
-    func markUnread(_ id: String) {
+    func markUnread(_ id: String) { markUnread(itemId: id) }
+
+    func markUnread(itemId id: String) {
         sessionRead.insert(id)
-        try? store.markRead(id, read: false)
+        if let oid = Self.opportunityId(id) { try? store.markOpportunityRead(oid, read: false) }
+        else { try? store.markRead(id, read: false) }
+    }
+
+    // MARK: Objectif du groupe et veille
+
+    func saveGoal(_ c: ConversationRecord, mode: GroupMode, focus: String, reprocess: Bool) {
+        try? store.setGoal(c.id, mode: mode, focus: focus)
+        if reprocess, let updated = try? store.conversation(c.id) { self.reprocess(updated) }
+    }
+
+    func authorName(ofMessage id: Int64) -> String {
+        guard let m = try? store.message(id), let a = try? store.author(m.authorId) else { return "?" }
+        return a.displayName ?? a.alias
+    }
+
+    /// Nom réel et numéro de l'auteur : en veille, le but est de pouvoir le contacter.
+    func authorContact(ofMessage id: Int64) -> (name: String, phone: String?) {
+        guard let m = try? store.message(id), let a = try? store.author(m.authorId) else { return ("?", nil) }
+        return (a.displayName ?? a.alias, a.phone)
+    }
+
+    func context(ofOpportunity o: OpportunityRecord) -> [(author: String, date: Date, text: String, isTarget: Bool)] {
+        guard let m = try? store.message(o.messageId), let around = try? store.messagesAround(m, before: 3, after: 3) else { return [] }
+        let authors = (try? store.authors(in: o.conversationId)) ?? [:]
+        return around.map { x in
+            let a = authors[x.authorId]
+            let text = [x.mediaLabel.map { "[\($0)]" }, x.text].compactMap { $0 }.joined(separator: " ")
+            return (a?.displayName ?? a?.alias ?? "?", x.sentAt, text, x.id == m.id)
+        }
+    }
+
+    func copyOpportunity(_ o: OpportunityRecord) {
+        guard let m = try? store.message(o.messageId) else { return }
+        let contact = authorContact(ofMessage: o.messageId)
+        let text = "\(o.summary)\n\(contact.name)\(contact.phone.map { " · \($0)" } ?? "")\n\n\(m.text ?? "")"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    /// Ouvre une conversation privée WhatsApp avec ce numéro.
+    func writePrivately(to phone: String) {
+        let digits = phone.filter(\.isNumber)
+        if let url = URL(string: "whatsapp://send?phone=\(digits)"), NSWorkspace.shared.urlForApplication(toOpen: url) != nil {
+            NSWorkspace.shared.open(url)
+        } else if let url = URL(string: "https://wa.me/\(digits)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func openWhatsApp() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "net.whatsapp.WhatsApp") {
+            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
     }
 
     func markAllRead() {
@@ -144,7 +230,7 @@ final class AppModel {
         guard !isSyncing, settings.onboardingDone || ids != nil else { return }
         isSyncing = true
         syncProgress = L("Démarrage…")
-        if settings.openWhatsAppBeforeSync { await openWhatsApp() }
+        if settings.openWhatsAppBeforeSync { await openWhatsAppAndWait() }
         let summary = await engine.run(settings: settings, only: ids) { text in
             Task { @MainActor in self.syncProgress = text }
         }
@@ -196,7 +282,7 @@ final class AppModel {
         syncNow()
     }
 
-    private func openWhatsApp() async {
+    private func openWhatsAppAndWait() async {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "net.whatsapp.WhatsApp") else { return }
         let alreadyRunning = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "net.whatsapp.WhatsApp" }
         let config = NSWorkspace.OpenConfiguration()
@@ -318,10 +404,14 @@ final class AppModel {
 
     /// Une seule notification par synchronisation, jamais une par fiche (brief § 7.4).
     private func notify(_ s: SyncSummary) {
-        guard settings.notificationsEnabled, s.error == nil, s.fichesCreated + s.fichesUpdated > 0 else { return }
+        guard settings.notificationsEnabled, s.error == nil, s.fichesCreated + s.fichesUpdated + s.opportunities > 0 else { return }
         let content = UNMutableNotificationContent()
         content.title = "DistiX"
-        content.body = L("\(s.fichesCreated) nouvelles questions, \(s.fichesUpdated) fiches mises à jour")
+        var parts: [String] = []
+        if s.opportunities > 0 { parts.append(L("\(s.opportunities) opportunités")) }
+        if s.fichesCreated > 0 { parts.append(L("\(s.fichesCreated) nouvelles questions")) }
+        if s.fichesUpdated > 0 { parts.append(L("\(s.fichesUpdated) fiches mises à jour")) }
+        content.body = parts.joined(separator: ", ")
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 }

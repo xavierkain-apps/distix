@@ -102,6 +102,7 @@ struct GroupPicker: View {
     @Environment(AppModel.self) private var model
     @Binding var depth: HistoryDepth
     var confirmUnselect = false
+    var showGoal = false
     @State private var filter = ""
     @State private var pendingUnselect: ConversationRecord?
 
@@ -120,6 +121,13 @@ struct GroupPicker: View {
                                 .foregroundStyle(.secondary)
                             Text(c.lastMessageAt?.formatted(date: .abbreviated, time: .omitted) ?? "—")
                                 .foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
+                            if c.selected && showGoal {
+                                Button { model.editingGoal = c } label: {
+                                    Image(systemName: c.mode == .watch ? "binoculars" : "target")
+                                }
+                                .buttonStyle(.borderless)
+                                .help(L("Objectif du groupe"))
+                            }
                         }
                     }
                 }
