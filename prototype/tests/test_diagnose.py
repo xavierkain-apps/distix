@@ -3,7 +3,7 @@ import io
 import sqlite3
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,9 +30,10 @@ class DiagnoseTest(unittest.TestCase):
         diagnose.DATA_DIR = self.dir / "data"
 
     def run_cli(self, *argv):
-        buf = io.StringIO()
-        with redirect_stdout(buf):
+        buf, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(buf), redirect_stderr(err):
             code = diagnose.main(["--db", str(self.db), *argv])
+        self.last_stderr = err.getvalue()
         return code, buf.getvalue()
 
     def test_original_files_untouched_and_copy_removed(self):
@@ -106,6 +107,7 @@ class DiagnoseTest(unittest.TestCase):
         self.writer.commit()
         code, out = self.run_cli("messages", "immo")
         self.assertEqual(code, 2)
+        self.assertIn("ZWAMESSAGE.ZTEXT", self.last_stderr)
         code, out = self.run_cli("report")
         self.assertEqual(code, 0)
         self.assertIn("ZWAMESSAGE.ZTEXT", out)
@@ -116,8 +118,11 @@ class DiagnoseTest(unittest.TestCase):
         self.assertEqual(self.run_cli("messages", "u")[0], 2)  # « u » dans les deux noms
 
     def test_missing_db(self):
-        code = diagnose.main(["--db", str(self.dir / "absent.sqlite"), "groups"])
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = diagnose.main(["--db", str(self.dir / "absent.sqlite"), "groups"])
         self.assertEqual(code, 2)
+        self.assertIn("Base introuvable", err.getvalue())
 
 
 class ProtobufTest(unittest.TestCase):
