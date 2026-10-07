@@ -20,13 +20,11 @@ struct GeneralSettings: View {
         @Bindable var model = model
         Form {
             Section(L("Synchronisation")) {
-                Picker(L("Fréquence"), selection: $model.settings.syncIntervalHours) {
-                    Text(L("Toutes les heures")).tag(1.0)
-                    Text(L("Toutes les 3 heures")).tag(3.0)
-                    Text(L("Toutes les 6 heures")).tag(6.0)
-                    Text(L("Toutes les 12 heures")).tag(12.0)
-                    Text(L("Une fois par jour")).tag(24.0)
+                Picker(L("Fréquence par défaut"), selection: $model.settings.syncIntervalHours) {
+                    ForEach(AppModel.intervalChoices, id: \.hours) { Text($0.label).tag($0.hours) }
                 }
+                Text(L("Un groupe peut avoir sa propre fréquence : clic droit sur le groupe dans la barre latérale."))
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle(L("Ouvrir WhatsApp avant chaque synchro"), isOn: $model.settings.openWhatsAppBeforeSync)
                 Toggle(L("Lancer DistiX à l'ouverture de session"), isOn: $model.settings.launchAtLogin)
                 Toggle(L("Notification après une synchro (une seule par synchro)"), isOn: $model.settings.notificationsEnabled)

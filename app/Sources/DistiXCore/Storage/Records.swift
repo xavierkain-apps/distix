@@ -16,6 +16,14 @@ public struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, I
     public var cursorSequence: Int64?
     public var cursorDate: Date?
     public var lastSyncedAt: Date?
+    /// Fréquence propre au groupe, en heures ; nil = réglage global.
+    public var syncIntervalHours: Double?
+
+    /// Le groupe doit-il être synchronisé maintenant ?
+    public func isDue(globalIntervalHours: Double, now: Date = Date()) -> Bool {
+        guard let last = lastSyncedAt else { return true }
+        return now.timeIntervalSince(last) >= (syncIntervalHours ?? globalIntervalHours) * 3600 - 30
+    }
 
     public static func makeId(source: String, sourceId: String) -> String { "\(source):\(sourceId)" }
 }

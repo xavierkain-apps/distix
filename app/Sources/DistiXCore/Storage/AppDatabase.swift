@@ -142,6 +142,10 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "threadsSkipped", .integer).notNull().defaults(to: 0)
             }
         }
+        m.registerMigration("v3") { db in
+            // Fréquence de synchronisation propre au groupe (heures) ; nil = réglage global.
+            try db.alter(table: "conversations") { t in t.add(column: "syncIntervalHours", .double) }
+        }
         return m
     }
 }

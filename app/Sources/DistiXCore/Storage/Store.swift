@@ -54,7 +54,7 @@ public final class Store: @unchecked Sendable {
                     try ConversationRecord(id: id, source: source, sourceId: c.id, name: c.name, selected: false,
                                            messageCount: c.messageCount, lastMessageAt: c.lastMessageAt,
                                            historyStart: nil, cursorSequence: nil, cursorDate: nil,
-                                           lastSyncedAt: nil).insert(db)
+                                           lastSyncedAt: nil, syncIntervalHours: nil).insert(db)
                 }
             }
         }
@@ -78,6 +78,13 @@ public final class Store: @unchecked Sendable {
                 c.historyStart = historyStart
             }
             try c.update(db)
+        }
+        notify()
+    }
+
+    public func setSyncInterval(_ id: String, hours: Double?) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE conversations SET syncIntervalHours = ? WHERE id = ?", arguments: [hours, id])
         }
         notify()
     }
@@ -146,6 +153,9 @@ public final class Store: @unchecked Sendable {
                 try db.execute(sql: """
                     UPDATE conversations SET cursorSequence = ?, cursorDate = ?, lastSyncedAt = ? WHERE id = ?
                     """, arguments: [cursor.sequence, cursor.date, Date(), conversationId])
+            } else {
+                try db.execute(sql: "UPDATE conversations SET lastSyncedAt = ? WHERE id = ?",
+                               arguments: [Date(), conversationId])
             }
             return inserted
         }

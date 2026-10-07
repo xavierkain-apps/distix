@@ -53,7 +53,8 @@
 "Fiches" = "Fiches";
 "Filtrer les groupes" = "Filtrer les groupes";
 "Fournisseur" = "Fournisseur";
-"Fréquence" = "Fréquence";
+"Fréquence de synchro" = "Fréquence de synchro";
+"Fréquence par défaut" = "Fréquence par défaut";
 "Fusion des questions similaires" = "Fusion des questions similaires";
 "Fusionner aussi entre groupes différents" = "Fusionner aussi entre groupes différents";
 "Fusionner dans" = "Fusionner dans";
@@ -122,9 +123,12 @@
 "Tout" = "Tout";
 "Tout marquer comme lu" = "Tout marquer comme lu";
 "Toutes les 12 heures" = "Toutes les 12 heures";
+"Toutes les 15 minutes" = "Toutes les 15 minutes";
 "Toutes les 3 heures" = "Toutes les 3 heures";
+"Toutes les 30 minutes" = "Toutes les 30 minutes";
 "Toutes les 6 heures" = "Toutes les 6 heures";
 "Toutes les heures" = "Toutes les heures";
+"Un groupe peut avoir sa propre fréquence : clic droit sur le groupe dans la barre latérale." = "Un groupe peut avoir sa propre fréquence : clic droit sur le groupe dans la barre latérale.";
 "Une fois par jour" = "Une fois par jour";
 "Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir." = "Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir.";
 "Vérification…" = "Vérification…";

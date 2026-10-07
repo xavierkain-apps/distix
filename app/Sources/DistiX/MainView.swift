@@ -71,13 +71,24 @@ struct SidebarView: View {
                                 .contextMenu { themeMenu(t, in: c.id) }
                         }
                     } label: {
-                        Label(c.name, systemImage: "person.3")
+                        Label(c.name, systemImage: c.syncIntervalHours == nil ? "person.3" : "person.3.sequence")
                             .badge(model.unread[c.id] ?? 0)
                             .tag(SidebarItem.group(c.id))
                             .contextMenu {
                                 Button(L("Gérer les groupes…")) { model.showGroups = true }
                                 Button(L("Exporter ce groupe…")) { model.exportFolder(conversationId: c.id) }
                                 Button(L("Tout marquer comme lu")) { try? model.store.markAllRead(conversationId: c.id) }
+                                Menu(L("Fréquence de synchro")) {
+                                    Button((c.syncIntervalHours == nil ? "✓ " : "") + L("Par défaut (\(AppModel.intervalLabel(model.settings.syncIntervalHours).lowercased()))")) {
+                                        model.setSyncInterval(c, hours: nil)
+                                    }
+                                    Divider()
+                                    ForEach(AppModel.intervalChoices, id: \.hours) { choice in
+                                        Button((c.syncIntervalHours == choice.hours ? "✓ " : "") + choice.label) {
+                                            model.setSyncInterval(c, hours: choice.hours)
+                                        }
+                                    }
+                                }
                                 Divider()
                                 Button(L("Retraiter ce groupe…")) { model.confirmReprocess = c }
                             }

@@ -198,6 +198,20 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(try store.statistics()["messages en attente de traitement"], 0)
     }
 
+    func testPerGroupSyncInterval() throws {
+        let now = Date()
+        var c = ConversationRecord(id: "w:g", source: "w", sourceId: "g", name: "g", selected: true, messageCount: 0,
+                                   lastMessageAt: nil, historyStart: nil, cursorSequence: nil, cursorDate: nil,
+                                   lastSyncedAt: nil, syncIntervalHours: nil)
+        XCTAssertTrue(c.isDue(globalIntervalHours: 3, now: now))           // jamais synchronisé
+        c.lastSyncedAt = now.addingTimeInterval(-3600)
+        XCTAssertFalse(c.isDue(globalIntervalHours: 3, now: now))          // global : 3 h
+        c.syncIntervalHours = 0.25
+        XCTAssertTrue(c.isDue(globalIntervalHours: 3, now: now))           // le réglage du groupe prime
+        c.syncIntervalHours = 6
+        XCTAssertFalse(c.isDue(globalIntervalHours: 0.25, now: now))
+    }
+
     func testSkippedThreadsAreCountedWithReason() async throws {
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

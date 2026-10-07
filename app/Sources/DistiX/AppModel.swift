@@ -22,7 +22,6 @@ final class AppModel {
         didSet {
             guard settings != oldValue else { return }
             settings.save()
-            if settings.syncIntervalHours != oldValue.syncIntervalHours { scheduleTimer() }
             if settings.launchAtLogin != oldValue.launchAtLogin { applyLoginItem() }
             if settings.notificationsEnabled && !oldValue.notificationsEnabled { requestNotifications() }
             if settings.showRealNames != oldValue.showRealNames { reloadFiches() }
@@ -158,12 +157,34 @@ final class AppModel {
 
     func syncNow() { Task { await sync() } }
 
+    /// Vérifie chaque minute quels groupes sont dus, selon leur fréquence propre ou
+    /// la fréquence globale, et ne synchronise que ceux-là.
     private func scheduleTimer() {
         timer?.invalidate()
-        let interval = max(0.25, settings.syncIntervalHours) * 3600
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.sync() }
+        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.syncDueGroups() }
         }
+    }
+
+    func syncDueGroups() async {
+        guard settings.onboardingDone, !isSyncing else { return }
+        let due = ((try? store.selectedConversations()) ?? [])
+            .filter { $0.isDue(globalIntervalHours: settings.syncIntervalHours) }.map(\.id)
+        if !due.isEmpty { await sync(only: due) }
+    }
+
+    func setSyncInterval(_ c: ConversationRecord, hours: Double?) {
+        try? store.setSyncInterval(c.id, hours: hours)
+    }
+
+    static let intervalChoices: [(hours: Double, label: String)] = [
+        (0.25, L("Toutes les 15 minutes")), (0.5, L("Toutes les 30 minutes")), (1, L("Toutes les heures")),
+        (3, L("Toutes les 3 heures")), (6, L("Toutes les 6 heures")), (12, L("Toutes les 12 heures")),
+        (24, L("Une fois par jour")),
+    ]
+
+    static func intervalLabel(_ hours: Double) -> String {
+        intervalChoices.first { $0.hours == hours }?.label ?? L("Toutes les \(hours.formatted()) h")
     }
 
     func startAfterOnboarding() {
