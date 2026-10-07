@@ -120,7 +120,7 @@ public final class Store: @unchecked Sendable {
                 let ids = try Int64.fetchAll(db, sql: """
                     SELECT o.id FROM opportunities o JOIN messages m ON m.id = o.messageId
                     WHERE o.summary LIKE ? OR o.reason LIKE ? OR m.text LIKE ?
-                    """, arguments: Array(repeating: "%\(text)%", count: 3))
+                    """, arguments: StatementArguments(Array(repeating: "%\(text)%", count: 3)))
                 r = r.filter(ids.contains(Column("id")))
             }
             return try r.order(Column("sentAt").desc).fetchAll(db)
