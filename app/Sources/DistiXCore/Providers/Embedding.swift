@@ -62,7 +62,7 @@ public final class NaturalLanguageEmbedder: EmbeddingProvider, @unchecked Sendab
     /// Dernier recours : sac de mots haché (reste déterministe et local).
     static func hashed(_ text: String, dimension: Int = 256) -> [Float] {
         var v = [Float](repeating: 0, count: dimension)
-        let words = text.lowercased().split { !$0.isLetter && !$0.isNumber }.filter { $0.count > 2 }
+        let words = text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count > 2 }
         for w in words {
             var h: UInt64 = 1469598103934665603
             for b in w.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }

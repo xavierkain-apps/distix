@@ -17,7 +17,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/DistiX" "$APP/Contents/MacOS/DistiX"
 cp "$BIN/distix-cli" "$APP/Contents/MacOS/distix-cli"
 for b in "$BIN"/*.bundle; do cp -R "$b" "$APP/Contents/Resources/"; done
-if [[ -f "$ROOT/app/AppIcon.icns" ]]; then cp "$ROOT/app/AppIcon.icns" "$APP/Contents/Resources/"; fi
+# Icône : générée à partir de app/AppIcon.png.
+if [[ -f "$ROOT/app/AppIcon.png" ]]; then
+  ICONSET="$(mktemp -d)/AppIcon.iconset"
+  mkdir -p "$ICONSET"
+  for s in 16 32 128 256 512; do
+    sips -z $s $s "$ROOT/app/AppIcon.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+    sips -z $((s * 2)) $((s * 2)) "$ROOT/app/AppIcon.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+fi
 
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 VERSION="0.1.0"
