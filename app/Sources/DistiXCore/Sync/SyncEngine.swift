@@ -44,10 +44,16 @@ public actor SyncEngine {
 
         var summary = SyncSummary()
         var run: SyncRunRecord?
+        let started = Date()
+        func step(_ name: String) {
+            Log.sync.info("Synchro \(name, privacy: .public) à \(Date().timeIntervalSince(started), format: .fixed(precision: 1), privacy: .public) s")
+        }
         do {
             run = try store.startRun()
+            step("démarrée")
             progress(String(localized: "Lecture de WhatsApp…", bundle: CoreResources.bundle))
             let snap = try await source.snapshot()
+            step("copie de WhatsApp faite")
             do {
                 try store.upsertConversations(try snap.listConversations(), source: source.id)
                 for conv in try store.selectedConversations()
@@ -61,6 +67,7 @@ public actor SyncEngine {
                                                              messages: messages, cursor: newCursor ?? cursor)
                 }
                 snap.close()
+                step("lecture terminée (\(summary.messagesRead) messages)")
             } catch {
                 snap.close()
                 throw error
@@ -70,9 +77,11 @@ public actor SyncEngine {
                 (conversationIds == nil || conversationIds!.contains($0.id))
             }
             let provider = try providerOverride ?? ProviderFactory.make(settings)
+            step("fournisseur d'IA prêt")
             let pipeline = Pipeline(store: store, provider: provider, embedder: embedder, settings: settings)
             for conv in pendingConversations {
                 progress(conv.name)
+                step("traitement d'un groupe")
                 do {
                     try await pipeline.process(conversationId: conv.id) { step in progress("\(conv.name) — \(step)") }
                 } catch {
@@ -93,7 +102,9 @@ public actor SyncEngine {
             summary.messagesProcessed = pipeline.stats.messagesProcessed
             summary.threadsSkipped = pipeline.stats.threadsSkipped
             summary.usage = pipeline.stats.usage
+            step("terminée")
         } catch {
+            step("en échec")
             summary.error = error.localizedDescription
             Log.sync.error("Synchronisation en échec : \(String(describing: type(of: error)), privacy: .public)")
         }

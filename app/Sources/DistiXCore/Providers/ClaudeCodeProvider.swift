@@ -39,7 +39,10 @@ public struct ClaudeCodeProvider: LLMProvider {
     /// Premier candidat qui fonctionne réellement (`claude --version` réussit) :
     /// un lanceur peut être exécutable mais cassé.
     public static func locate(custom: String? = nil) -> URL? {
-        candidates(custom: custom).first { works($0) }
+        let started = Date()
+        let found = candidates(custom: custom).first { works($0) }
+        Log.ai.info("Recherche de Claude Code : \(found == nil ? "aucun" : "trouvé", privacy: .public) en \(Date().timeIntervalSince(started), format: .fixed(precision: 1), privacy: .public) s")
+        return found
     }
 
     static func works(_ url: URL) -> Bool {

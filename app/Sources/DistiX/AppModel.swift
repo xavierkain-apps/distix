@@ -195,12 +195,15 @@ final class AppModel {
 
     /// Ouvre une conversation privée WhatsApp avec ce numéro.
     func writePrivately(to phone: String) {
+        // Uniquement par WhatsApp Desktop : jamais de numéro tiers dans une adresse web.
         let digits = phone.filter(\.isNumber)
-        if let url = URL(string: "whatsapp://send?phone=\(digits)"), NSWorkspace.shared.urlForApplication(toOpen: url) != nil {
-            NSWorkspace.shared.open(url)
-        } else if let url = URL(string: "https://wa.me/\(digits)") {
-            NSWorkspace.shared.open(url)
+        guard let url = URL(string: "whatsapp://send?phone=\(digits)"), NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
+            alert = L("WhatsApp Desktop ne répond pas à l'ouverture d'une conversation. Numéro copié dans le presse-papiers.")
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(phone, forType: .string)
+            return
         }
+        NSWorkspace.shared.open(url)
     }
 
     func openWhatsApp() {
