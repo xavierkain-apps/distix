@@ -67,6 +67,9 @@ public struct ClaudeCodeProvider: LLMProvider {
         }
         if result.is_error == true {
             let message = result.result ?? result.subtype ?? "erreur"
+            if ["authenticate", "oauth", "/login", "not logged", "log in"].contains(where: { message.localizedCaseInsensitiveContains($0) }) {
+                throw LLMError.notConfigured(String(localized: "Claude Code n'est pas connecté à votre compte. Ouvrez Terminal, lancez « \(executable.path) », tapez /login et suivez les instructions, puis réessayez.", bundle: CoreResources.bundle))
+            }
             if message.localizedCaseInsensitiveContains("rate") || message.localizedCaseInsensitiveContains("limit") {
                 throw LLMError.http(429, message)
             }
