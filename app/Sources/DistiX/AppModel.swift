@@ -159,9 +159,21 @@ final class AppModel {
 
     // MARK: Objectif du groupe et veille
 
-    func saveGoal(_ c: ConversationRecord, mode: GroupMode, focus: String, reprocess: Bool) {
+    func saveGoal(_ c: ConversationRecord, mode: GroupMode, focus: String, language: String?, reprocess: Bool) {
         try? store.setGoal(c.id, mode: mode, focus: focus)
+        try? store.setLanguage(c.id, language: language)
         if reprocess, let updated = try? store.conversation(c.id) { self.reprocess(updated) }
+    }
+
+    func translate(_ fiche: FicheRecord, to language: String) {
+        Task {
+            isSyncing = true
+            syncProgress = L("Traduction de la fiche…")
+            do { try await engine.translate(ficheId: fiche.id, to: language, settings: settings) } catch { alert = error.localizedDescription }
+            isSyncing = false
+            syncProgress = nil
+            reload()
+        }
     }
 
     func authorName(ofMessage id: Int64) -> String {

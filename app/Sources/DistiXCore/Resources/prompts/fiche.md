@@ -10,7 +10,7 @@ Règles impératives :
 - `context` : deux ou trois phrases sur la situation de la personne qui demande, uniquement ce qu'elle a dit.
 - `question` : la question formulée clairement, en une phrase.
 - `links` : les liens (URL) partagés dans le fil, tels quels.
-- Rédige dans la langue de la conversation. Sois concis : une réponse = une ou deux phrases.
+- Rédige dans la langue indiquée par la consigne LANGUE DE LA FICHE. Sois concis : une réponse = une ou deux phrases.
 - Les personnes sont désignées par des alias (« Membre 12 ») : n'essaie pas de les identifier, et ne cite pas d'alias dans la fiche sauf si c'est indispensable.
 
 Thème : choisis `theme` dans la liste des thèmes existants. N'en propose un nouveau que si aucun ne convient ; il doit alors être court (un à trois mots) et assez général pour regrouper d'autres fiches.

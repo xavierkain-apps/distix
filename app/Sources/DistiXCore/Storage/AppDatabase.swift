@@ -169,6 +169,15 @@ public final class AppDatabase: @unchecked Sendable {
             }
             try db.alter(table: "authors") { t in t.add(column: "phone", .text) }
         }
+        m.registerMigration("v5") { db in
+            // Langue des fiches propre au groupe (nil = réglage global, "" = langue d'origine)
+            // et traduction à la demande d'une fiche (l'original est conservé).
+            try db.alter(table: "conversations") { t in t.add(column: "language", .text) }
+            try db.alter(table: "fiches") { t in
+                t.add(column: "translation", .blob)
+                t.add(column: "translationLanguage", .text)
+            }
+        }
         return m
     }
 }

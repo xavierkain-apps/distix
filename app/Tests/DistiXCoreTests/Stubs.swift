@@ -23,6 +23,8 @@ final class StubLLM: LLMProvider, @unchecked Sendable {
         let user = request.user
         if request.system.hasPrefix("Tu aides") {
             return (try JSONSerialization.data(withJSONObject: attribution(user)), usage)
+        } else if request.system.hasPrefix("Tu traduis") {
+            return (Data(user.utf8), usage)                       // « traduction » identique
         } else if request.system.hasPrefix("Tu fais de la veille") {
             // Règle : un message contenant « cherche » correspond, score 80.
             let lines = (user.components(separatedBy: "MESSAGES À EXAMINER\n").last ?? "").components(separatedBy: "\n")

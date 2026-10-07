@@ -21,6 +21,10 @@ public struct ConversationRecord: Codable, FetchableRecord, PersistableRecord, I
     public var mode: GroupMode = .knowledge
     /// Consignes de l'utilisateur pour ce groupe (centres d'intérêt, critères de veille).
     public var focus: String?
+    /// Langue des fiches de ce groupe ; nil = réglage global, "" = langue d'origine.
+    public var language: String?
+
+    public func ficheLanguage(default global: String) -> String { language ?? global }
 
     /// Le groupe doit-il être synchronisé maintenant ?
     public func isDue(globalIntervalHours: Double, now: Date = Date()) -> Bool {
@@ -147,8 +151,14 @@ public struct FicheRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     /// Raison de la pastille quand la fiche est non lue.
     public var readState: ReadState?
     public var changeNote: String?
+    /// Traduction à la demande (FicheContent en JSON) et sa langue.
+    public var translation: Data?
+    public var translationLanguage: String?
 
     public var decoded: FicheContent? { try? JSONDecoder.distix.decode(FicheContent.self, from: content) }
+    public var decodedTranslation: FicheContent? {
+        translation.flatMap { try? JSONDecoder.distix.decode(FicheContent.self, from: $0) }
+    }
     public var isUnread: Bool { readAt == nil }
 }
 

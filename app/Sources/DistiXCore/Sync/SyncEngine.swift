@@ -51,7 +51,7 @@ public actor SyncEngine {
         do {
             run = try store.startRun()
             step("démarrée")
-            progress(String(localized: "Lecture de WhatsApp…", bundle: CoreResources.bundle))
+            progress(String(localized: "Lecture de WhatsApp… (si macOS le demande, autorisez DistiX à accéder aux données d'autres apps)", bundle: CoreResources.bundle))
             let snap = try await source.snapshot()
             step("copie de WhatsApp faite")
             do {
@@ -124,6 +124,13 @@ public actor SyncEngine {
             try? store.saveRun(r)
         }
         return summary
+    }
+
+    /// Traduit une fiche à la demande (action de l'interface).
+    public func translate(ficheId: String, to language: String, settings: AppSettings) async throws {
+        let provider = try providerOverride ?? ProviderFactory.make(settings)
+        try await Pipeline(store: store, provider: provider, embedder: embedder, settings: settings)
+            .translate(ficheId: ficheId, to: language)
     }
 
     /// Défait les fusions d'une fiche (action de l'interface).

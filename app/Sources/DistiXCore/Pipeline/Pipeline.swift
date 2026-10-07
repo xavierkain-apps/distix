@@ -158,7 +158,8 @@ public final class Pipeline: @unchecked Sendable {
             content: try JSONEncoder.distix.encode(content),
             embedding: try await embedding(for: content),
             firstMessageAt: messages.first?.sentAt ?? Date(), lastMessageAt: messages.last?.sentAt ?? Date(),
-            createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil)
+            createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil,
+            translation: nil, translationLanguage: nil)
         try store.saveFiche(fiche, threadIds: threadIds)
         return fiche
     }
@@ -186,6 +187,8 @@ public final class Pipeline: @unchecked Sendable {
         fiche.firstMessageAt = messages.first?.sentAt ?? fiche.firstMessageAt
         fiche.lastMessageAt = messages.last?.sentAt ?? fiche.lastMessageAt
         fiche.updatedAt = Date()
+        fiche.translation = nil            // traduction périmée
+        fiche.translationLanguage = nil
         if changed {
             let stillNew = fiche.readAt == nil && fiche.readState == .new
             fiche.readAt = nil
@@ -238,6 +241,19 @@ public final class Pipeline: @unchecked Sendable {
         stats.usage += usage
     }
 
+    /// Traduit une fiche à la demande ; l'original est conservé.
+    public func translate(ficheId: String, to language: String) async throws {
+        guard let fiche = try store.fiche(ficheId), let content = fiche.decoded else { return }
+        let source = String(data: try JSONEncoder.distix.encode(content), encoding: .utf8) ?? "{}"
+        let request = LLMRequest(
+            system: "Tu traduis une fiche de connaissance en \(FicheLanguage.name(language)). Traduis tous les textes, "
+                + "garde la structure, les valeurs de status et support, les identifiants et les liens à l'identique.",
+            user: source, schema: FicheWriter.contentSchema, model: settings.effectiveAttributionModel(), maxTokens: 6000)
+        let (translated, u) = try await provider.generate(request, as: FicheContent.self)
+        stats.usage += u
+        try store.saveTranslation(ficheId: ficheId, content: translated, language: language)
+    }
+
     /// Défait les fusions d'une fiche : chaque fiche d'origine est recréée (avec son
     /// identifiant) à partir de ses fils, puis la fiche restante est régénérée.
     public func undoMerge(ficheId: String) async throws {
@@ -258,7 +274,8 @@ public final class Pipeline: @unchecked Sendable {
                 status: content.status, question: content.question,
                 content: try JSONEncoder.distix.encode(content), embedding: try await embedding(for: content),
                 firstMessageAt: messages.first?.sentAt ?? Date(), lastMessageAt: messages.last?.sentAt ?? Date(),
-                createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil)
+                createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil,
+                translation: nil, translationLanguage: nil)
             try store.saveFiche(restored, threadIds: [])
             try store.detachThreads(threadIds, to: originalId)
         }

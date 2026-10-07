@@ -43,6 +43,19 @@ struct FicheWriter {
         "thread_summary": Schema.string,
     ])
 
+    /// Schéma d'une fiche (FicheContent), pour la traduction.
+    static let contentSchema = Schema.object([
+        "question": Schema.string, "context": Schema.string,
+        "status": Schema.enumeration(FicheStatus.allCases.map(\.rawValue)), "theme": Schema.string,
+        "answers": Schema.array(Schema.object([
+            "summary": Schema.string,
+            "support": Schema.enumeration(["consensus", "avis_isole", "conteste"]),
+            "source_message_ids": Schema.array(Schema.string),
+        ])),
+        "disagreements": Schema.array(Schema.string), "open_points": Schema.array(Schema.string),
+        "links": Schema.array(Schema.string),
+    ])
+
     /// Un fil très long est tronqué : début (la question) et fin (les dernières réponses).
     static let maxMessages = 160
 
@@ -56,7 +69,9 @@ struct FicheWriter {
 
     func write(conversationId: String, threadIds: [Int64], previous: FicheContent?,
                pseudo: Pseudonymizer, usage: inout LLMUsage) async throws -> Result {
-        let focus = try store.conversation(conversationId)?.focus
+        let conversation = try store.conversation(conversationId)
+        let focus = conversation?.focus
+        let language = conversation?.ficheLanguage(default: settings.ficheLanguage) ?? settings.ficheLanguage
         var messages = try store.messages(ofThreads: threadIds)
         if messages.count > Self.maxMessages {
             messages = Array(messages.prefix(30)) + Array(messages.suffix(Self.maxMessages - 30))
@@ -73,6 +88,7 @@ struct FicheWriter {
         if let focus, !focus.isEmpty {
             prompt += "CONSIGNES DE L'UTILISATEUR POUR CE GROUPE (ce qui l'intéresse ; elles priment pour décider is_knowledge et ce que la fiche met en avant)\n\(focus)\n\n"
         }
+        prompt += FicheLanguage.instruction(language) + "\n\n"
         prompt += "THÈMES EXISTANTS : " + (themes.isEmpty ? "(aucun, propose-en un)" : themes.joined(separator: ", ")) + "\n\n"
         if let previous {
             // La version précédente référence des identifiants source : on les traduit.

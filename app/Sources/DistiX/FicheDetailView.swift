@@ -7,12 +7,22 @@ struct FicheDetailView: View {
     @State private var showSources = false
     @State private var newTheme = ""
     @State private var askingTheme = false
+    @State private var showOriginal = false
 
     var body: some View {
-        let c = fiche.decoded
+        let c = showOriginal ? fiche.decoded : (fiche.decodedTranslation ?? fiche.decoded)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if let lang = fiche.translationLanguage, fiche.translation != nil {
+                    HStack {
+                        Label(showOriginal ? L("Version originale") : L("Traduction en \(FicheLanguage.name(lang))"),
+                              systemImage: "character.book.closed")
+                        Button(showOriginal ? L("Afficher la traduction") : L("Afficher l'original")) { showOriginal.toggle() }
+                            .buttonStyle(.link)
+                    }
+                    .font(.callout).foregroundStyle(.secondary)
+                }
                 if let c {
                     if !c.context.isEmpty {
                         section(L("Contexte")) { Text(c.context).textSelection(.enabled) }
@@ -66,6 +76,11 @@ struct FicheDetailView: View {
                 Menu {
                     Button(L("Exporter en .md…")) { model.exportFiche(fiche) }
                     Button(L("Marquer comme non lue")) { model.markUnread(fiche.id) }
+                    Menu(L("Traduire en")) {
+                        ForEach(FicheLanguage.choices, id: \.code) { lang in
+                            Button(lang.name.capitalized) { showOriginal = false; model.translate(fiche, to: lang.code) }
+                        }
+                    }
                     Menu(L("Changer de thème")) {
                         ForEach(model.themes[fiche.conversationId] ?? []) { t in
                             Button(t.name) { model.setTheme(fiche, name: t.name) }
@@ -91,7 +106,7 @@ struct FicheDetailView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(fiche.question).font(.title2.bold()).textSelection(.enabled)
+            Text((showOriginal ? nil : fiche.decodedTranslation?.question) ?? fiche.question).font(.title2.bold()).textSelection(.enabled)
             HStack(spacing: 10) {
                 StatusBadge(status: fiche.status)
                 Text(model.themeName(fiche.themeId))

@@ -28,6 +28,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var crossGroupMerge = false
     /// Fiches rédigées en parallèle.
     public var concurrency = 3
+    /// Langue des fiches par défaut ; vide = langue d'origine de la conversation.
+    public var ficheLanguage = FicheLanguage.original
     // État
     public var onboardingDone = false
 
@@ -83,7 +85,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showRealNames = v(.showRealNames, showRealNames); windowSize = v(.windowSize, windowSize)
         windowOverlap = v(.windowOverlap, windowOverlap); threadOpenDays = v(.threadOpenDays, threadOpenDays)
         mergeThreshold = v(.mergeThreshold, mergeThreshold); crossGroupMerge = v(.crossGroupMerge, crossGroupMerge)
-        concurrency = v(.concurrency, concurrency)
+        concurrency = v(.concurrency, concurrency); ficheLanguage = v(.ficheLanguage, ficheLanguage)
         onboardingDone = v(.onboardingDone, onboardingDone)
     }
 }

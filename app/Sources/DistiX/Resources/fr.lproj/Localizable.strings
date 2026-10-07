@@ -10,6 +10,8 @@
 "Actualiser la liste" = "Actualiser la liste";
 "Adresse du serveur" = "Adresse du serveur";
 "Adéquation à vos critères, sur 100" = "Adéquation à vos critères, sur 100";
+"Afficher l'original" = "Afficher l'original";
+"Afficher la traduction" = "Afficher la traduction";
 "Afficher les vrais noms dans DistiX" = "Afficher les vrais noms dans DistiX";
 "Ajouter ou retirer des groupes" = "Ajouter ou retirer des groupes";
 "Ajouter ou retirer des groupes…" = "Ajouter ou retirer des groupes…";
@@ -27,6 +29,7 @@
 "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre." = "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre.";
 "Ces consignes sont envoyées à l'IA avec les messages du groupe. Remplacez les passages entre crochets." = "Ces consignes sont envoyées à l'IA avec les messages du groupe. Remplacez les passages entre crochets.";
 "Changer de thème" = "Changer de thème";
+"Chaque groupe peut avoir sa propre langue (Objectif du groupe). S'applique aux prochaines fiches ; « Retraiter ce groupe » refait les existantes, ou traduisez une fiche à la demande." = "Chaque groupe peut avoir sa propre langue (Objectif du groupe). S'applique aux prochaines fiches ; « Retraiter ce groupe » refait les existantes, ou traduisez une fiche à la demande.";
 "Chemin de claude (facultatif)" = "Chemin de claude (facultatif)";
 "Choisir des groupes…" = "Choisir des groupes…";
 "Choisissez une fiche dans la liste." = "Choisissez une fiche dans la liste.";
@@ -89,6 +92,8 @@
 "La base WhatsApp est lisible." = "La base WhatsApp est lisible.";
 "La clé est conservée dans le Trousseau macOS." = "La clé est conservée dans le Trousseau macOS.";
 "Lancer DistiX à l'ouverture de session" = "Lancer DistiX à l'ouverture de session";
+"Langue d'origine de la conversation" = "Langue d'origine de la conversation";
+"Langue des fiches" = "Langue des fiches";
 "Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées." = "Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées.";
 "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique." = "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique.";
 "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant." = "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant.";
@@ -168,10 +173,13 @@
 "Toutes les 30 minutes" = "Toutes les 30 minutes";
 "Toutes les 6 heures" = "Toutes les 6 heures";
 "Toutes les heures" = "Toutes les heures";
+"Traduction de la fiche…" = "Traduction de la fiche…";
+"Traduire en" = "Traduire en";
 "Un groupe peut avoir sa propre fréquence : clic droit sur le groupe dans la barre latérale." = "Un groupe peut avoir sa propre fréquence : clic droit sur le groupe dans la barre latérale.";
 "Une fois par jour" = "Une fois par jour";
 "Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir." = "Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir.";
 "Veille" = "Veille";
+"Version originale" = "Version originale";
 "Vérification…" = "Vérification…";
 "Vérifier l'accès" = "Vérifier l'accès";
 "WhatsApp Desktop doit être installé et connecté à votre compte. Les messages ne sont disponibles que lorsque WhatsApp est ouvert de temps en temps." = "WhatsApp Desktop doit être installé et connecté à votre compte. Les messages ne sont disponibles que lorsque WhatsApp est ouvert de temps en temps.";
@@ -179,6 +187,7 @@
 "WhatsApp Desktop ne répond pas à l'ouverture d'une conversation. Numéro copié dans le presse-papiers." = "WhatsApp Desktop ne répond pas à l'ouverture d'une conversation. Numéro copié dans le presse-papiers.";
 "aucun message exploitable" = "aucun message exploitable";
 "introuvable" = "introuvable";
+"langue d'origine" = "langue d'origine";
 "macOS demande votre autorisation." = "macOS demande votre autorisation.";
 "mis à jour" = "mis à jour";
 "nouveau" = "nouveau";

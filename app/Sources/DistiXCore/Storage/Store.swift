@@ -55,7 +55,8 @@ public final class Store: @unchecked Sendable {
                     try ConversationRecord(id: id, source: source, sourceId: c.id, name: c.name, selected: false,
                                            messageCount: c.messageCount, lastMessageAt: c.lastMessageAt,
                                            historyStart: nil, cursorSequence: nil, cursorDate: nil,
-                                           lastSyncedAt: nil, syncIntervalHours: nil, mode: .knowledge, focus: nil).insert(db)
+                                           lastSyncedAt: nil, syncIntervalHours: nil, mode: .knowledge, focus: nil,
+                                           language: nil).insert(db)
                 }
             }
         }
@@ -89,6 +90,21 @@ public final class Store: @unchecked Sendable {
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE conversationId = ? AND kind IN ('text', 'media')",
                              arguments: [conversationId]) ?? 0
         }
+    }
+
+    public func setLanguage(_ id: String, language: String?) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE conversations SET language = ? WHERE id = ?", arguments: [language, id])
+        }
+        notify()
+    }
+
+    public func saveTranslation(ficheId: String, content: FicheContent, language: String) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE fiches SET translation = ?, translationLanguage = ? WHERE id = ?",
+                           arguments: [try JSONEncoder.distix.encode(content), language, ficheId])
+        }
+        notify()
     }
 
     public func setGoal(_ id: String, mode: GroupMode, focus: String?) throws {

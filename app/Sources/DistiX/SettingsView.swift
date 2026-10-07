@@ -49,6 +49,14 @@ struct GeneralSettings: View {
                     Text(L("Aucune synchronisation pour l'instant."))
                 }
             }
+            Section(L("Fiches")) {
+                Picker(L("Langue des fiches"), selection: $model.settings.ficheLanguage) {
+                    Text(L("Langue d'origine de la conversation")).tag(FicheLanguage.original)
+                    ForEach(FicheLanguage.choices, id: \.code) { Text($0.name.capitalized).tag($0.code) }
+                }
+                Text(L("Chaque groupe peut avoir sa propre langue (Objectif du groupe). S'applique aux prochaines fiches ; « Retraiter ce groupe » refait les existantes, ou traduisez une fiche à la demande."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section(L("Confidentialité")) {
                 Toggle(L("Remplacer les noms par des alias avant l'envoi à l'IA"), isOn: $model.settings.pseudonymize)
                 Toggle(L("Afficher les vrais noms dans DistiX"), isOn: $model.settings.showRealNames)

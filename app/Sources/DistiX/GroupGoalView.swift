@@ -34,6 +34,7 @@ struct GroupGoalSheet: View {
     let conversation: ConversationRecord
     @State private var mode: GroupMode = .knowledge
     @State private var focus = ""
+    @State private var language: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -65,15 +66,24 @@ struct GroupGoalSheet: View {
             }
             Text(L("Ces consignes sont envoyées à l'IA avec les messages du groupe. Remplacez les passages entre crochets."))
                 .font(.caption).foregroundStyle(.secondary)
+            if mode == .knowledge {
+                Picker(L("Langue des fiches"), selection: $language) {
+                    Text(L("Par défaut (\(model.settings.ficheLanguage.isEmpty ? L("langue d'origine") : FicheLanguage.name(model.settings.ficheLanguage)))"))
+                        .tag(String?.none)
+                    Text(L("Langue d'origine de la conversation")).tag(String?.some(FicheLanguage.original))
+                    ForEach(FicheLanguage.choices, id: \.code) { Text($0.name.capitalized).tag(String?.some($0.code)) }
+                }
+                .frame(maxWidth: 420)
+            }
             HStack {
                 Spacer()
                 Button(L("Annuler"), role: .cancel) { dismiss() }
                 Button(L("Enregistrer")) {
-                    model.saveGoal(conversation, mode: mode, focus: focus, reprocess: false)
+                    model.saveGoal(conversation, mode: mode, focus: focus, language: language, reprocess: false)
                     dismiss()
                 }
                 Button(L("Enregistrer et retraiter le groupe")) {
-                    model.saveGoal(conversation, mode: mode, focus: focus, reprocess: true)
+                    model.saveGoal(conversation, mode: mode, focus: focus, language: language, reprocess: true)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -85,6 +95,7 @@ struct GroupGoalSheet: View {
         .onAppear {
             mode = conversation.mode
             focus = conversation.focus ?? ""
+            language = conversation.language
         }
     }
 }

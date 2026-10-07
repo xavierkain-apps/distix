@@ -265,6 +265,28 @@ final class PipelineTests: XCTestCase {
         XCTAssertTrue(llm.prompts.filter { !$0.contains("FICHE A") }.allSatisfy { $0.contains("Surtout le financement.") })
     }
 
+    func testLanguageInstructionAndTranslation() async throws {
+        let store = Store(try AppDatabase.inMemory())
+        let llm = RecordingLLM(base: StubLLM())
+        let engine = SyncEngine(store: store, source: WhatsAppSource(databaseURL: waURL), embedder: StubEmbedder(), provider: llm)
+        try await select(store, engine)
+        let id = ConversationRecord.makeId(source: "whatsapp", sourceId: FakeWhatsApp.group)
+        var s = settings
+        s.ficheLanguage = "en"                                   // réglage global
+        try store.setLanguage(id, language: "")                  // le groupe garde la langue d'origine
+        _ = await engine.run(settings: s)
+        let fichePrompts = llm.prompts.filter { $0.contains("MESSAGES DU FIL") }
+        XCTAssertFalse(fichePrompts.isEmpty)
+        XCTAssertTrue(fichePrompts.allSatisfy { $0.contains("Ne traduis pas") })
+
+        let f = try store.fiches(.init()).first!
+        try await engine.translate(ficheId: f.id, to: "en", settings: s)
+        let t = try store.fiche(f.id)!
+        XCTAssertEqual(t.translationLanguage, "en")
+        XCTAssertNotNil(t.decodedTranslation)
+        XCTAssertEqual(t.decoded, f.decoded)                     // l'original est conservé
+    }
+
     func testSkippedThreadsAreCountedWithReason() async throws {
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
