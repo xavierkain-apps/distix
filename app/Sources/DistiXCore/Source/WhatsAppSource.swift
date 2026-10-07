@@ -97,6 +97,7 @@ final class WhatsAppSnapshot: SourceSnapshot {
     private var hasProfileNames = false
     private var hasMessageInfo = false
     private var messageInfoByPK = false
+    private var identities = WhatsAppIdentities()
 
     init(original: URL, attempts: Int = 3) throws {
         let fm = FileManager.default
@@ -127,6 +128,7 @@ final class WhatsAppSnapshot: SourceSnapshot {
                 if check == "ok" {
                     dbQueue = queue
                     try validateSchema()
+                    identities = WhatsAppIdentities.load(from: original.deletingLastPathComponent(), into: directory)
                     return
                 }
                 lastError = check ?? "?"
@@ -224,19 +226,21 @@ final class WhatsAppSnapshot: SourceSnapshot {
         return out
     }
 
-    /// Membres du groupe : Z_PK -> (jid, nom).
-    private func members(_ db: Database, chat: Int64) throws -> [Int64: (String, String?)] {
+    /// Membres du groupe : Z_PK -> (jid, nom, numéro partagé).
+    private func members(_ db: Database, chat: Int64) throws -> [Int64: (String, String?, String?)] {
         let cols = Set(try db.columns(in: "ZWAGROUPMEMBER").map(\.name))
         let nameCols = ["ZCONTACTNAME", "ZFIRSTNAME"].filter(cols.contains)
         let select = (["Z_PK", "ZMEMBERJID"] + nameCols).joined(separator: ", ")
         let profiles = try profileNames(db)
-        var out: [Int64: (String, String?)] = [:]
+        var out: [Int64: (String, String?, String?)] = [:]
         for row in try Row.fetchAll(db, sql: "SELECT \(select) FROM ZWAGROUPMEMBER WHERE ZCHATSESSION = ?",
                                     arguments: [chat]) {
             guard let jid: String = row["ZMEMBERJID"] else { continue }
             let local = nameCols.lazy.compactMap { row[$0] as String? }
                 .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
-            out[row["Z_PK"]] = (jid, local ?? profiles[jid])
+            // Nom : celui du carnet d'adresses, sinon WhatsApp (local, profil, compte).
+            let name = identities.contactName(jid) ?? local ?? profiles[jid] ?? identities.accountName(jid)
+            out[row["Z_PK"]] = (jid, name, identities.sharedPhone(jid))
         }
         return out
     }
@@ -244,9 +248,9 @@ final class WhatsAppSnapshot: SourceSnapshot {
     func listAuthors(in conversationId: String) throws -> [SourceAuthor] {
         try db().read { db in
             let chat = try chatPK(db, conversationId)
-            return try members(db, chat: chat).values.map { jid, name in
+            return try members(db, chat: chat).values.map { jid, name, phone in
                 SourceAuthor(id: jid, displayName: name, mentionToken: jid.split(separator: "@").first.map(String.init),
-                             phone: WhatsAppSchema.phone(fromJid: jid))
+                             phone: phone)
             }
         }
     }
@@ -319,5 +323,88 @@ enum Emoji {
     static func isEmoji(_ s: String) -> Bool {
         guard !s.isEmpty, s.count <= 4 else { return false }
         return s.unicodeScalars.allSatisfy { $0.value >= 0x2000 || $0 == "\u{200D}" || $0 == "\u{FE0F}" }
+    }
+}
+
+// MARK: - Noms et numéros (LID.sqlite, ContactsV2.sqlite)
+
+/// Identités issues de deux autres bases de WhatsApp, lues comme ChatStorage (copie,
+/// lecture seule). Facultatives : si elles manquent ou changent de format, on
+/// continue sans (noms et numéros inconnus). Voir docs/schema-whatsapp.md.
+///
+/// Règle choisie par Xavier (2026-10-07) : un numéro n'est exposé que s'il est
+/// partagé : contact du carnet d'adresses, membre adressé par son numéro dans le
+/// groupe, ou compte dont l'état de partage vaut 1 (sens exact non documenté ; on
+/// retient l'interprétation prudente). Jamais envoyé à l'IA.
+struct WhatsAppIdentities {
+    struct Entry { var name: String?; var phone: String? }
+    private(set) var contacts: [String: Entry] = [:]       // clé : LID ou JID
+    private(set) var accounts: [String: Entry] = [:]       // clé : LID ; numéro seulement si partagé
+    static let sharedState = 1
+
+    func contactName(_ jid: String) -> String? { contacts[jid]?.name }
+    func accountName(_ jid: String) -> String? { accounts[jid]?.name }
+
+    func sharedPhone(_ jid: String) -> String? {
+        contacts[jid]?.phone ?? WhatsAppSchema.phone(fromJid: jid) ?? accounts[jid]?.phone
+    }
+
+    static func normalizePhone(_ raw: String?) -> String? {
+        guard let digits = raw?.filter(\.isNumber), digits.count >= 8 else { return nil }
+        return "+" + digits
+    }
+
+    static func clean(_ s: String?) -> String? {
+        guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
+        return t
+    }
+
+    static func load(from folder: URL, into directory: URL) -> WhatsAppIdentities {
+        var out = WhatsAppIdentities()
+        if let q = openCopy(folder.appendingPathComponent("ContactsV2.sqlite"), into: directory) {
+            _ = try? q.read { db in
+                let cols = Set(try db.columns(in: "ZWAADDRESSBOOKCONTACT").map(\.name))
+                guard cols.isSuperset(of: ["ZLID", "ZWHATSAPPID", "ZFULLNAME", "ZPHONENUMBER"]) else { return }
+                for row in try Row.fetchAll(db, sql: "SELECT ZLID, ZWHATSAPPID, ZFULLNAME, ZPHONENUMBER FROM ZWAADDRESSBOOKCONTACT") {
+                    let e = Entry(name: clean(row["ZFULLNAME"]), phone: normalizePhone(row["ZPHONENUMBER"]))
+                    for key in [row["ZLID"] as String?, row["ZWHATSAPPID"] as String?].compactMap({ $0 }) { out.contacts[key] = e }
+                }
+            }
+        }
+        if let q = openCopy(folder.appendingPathComponent("LID.sqlite"), into: directory) {
+            _ = try? q.read { db in
+                let cols = Set(try db.columns(in: "ZWAZACCOUNT").map(\.name))
+                guard cols.isSuperset(of: ["ZIDENTIFIER", "ZDISPLAYNAME", "ZPHONENUMBER", "ZCURRENTPHONENUMBERSHARINGSTATE"]) else { return }
+                for row in try Row.fetchAll(db, sql: """
+                    SELECT ZIDENTIFIER, ZDISPLAYNAME, ZPHONENUMBER, ZCURRENTPHONENUMBERSHARINGSTATE FROM ZWAZACCOUNT
+                    """) {
+                    guard let id: String = row["ZIDENTIFIER"] else { continue }
+                    let shared = (row["ZCURRENTPHONENUMBERSHARINGSTATE"] as Int?) == sharedState
+                    out.accounts[id] = Entry(name: clean(row["ZDISPLAYNAME"]),
+                                             phone: shared ? normalizePhone(row["ZPHONENUMBER"]) : nil)
+                }
+            }
+        }
+        return out
+    }
+
+    /// Copie la base (et ses fichiers -wal/-shm) dans `directory` et l'ouvre en lecture seule.
+    private static func openCopy(_ original: URL, into directory: URL) -> DatabaseQueue? {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: original.path) else { return nil }
+        let dest = directory.appendingPathComponent(original.lastPathComponent)
+        do {
+            for suffix in ["", "-wal", "-shm"] {
+                let src = URL(fileURLWithPath: original.path + suffix)
+                guard fm.fileExists(atPath: src.path) else { continue }
+                try fm.copyItem(at: src, to: URL(fileURLWithPath: dest.path + suffix))
+            }
+            var config = Configuration()
+            config.readonly = true
+            return try DatabaseQueue(path: dest.path, configuration: config)
+        } catch {
+            Log.core.warning("Base d'identités illisible : \(original.lastPathComponent, privacy: .public)")
+            return nil
+        }
     }
 }

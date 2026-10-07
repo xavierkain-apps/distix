@@ -78,6 +78,32 @@ final class WhatsAppSourceTests: XCTestCase {
         XCTAssertEqual(m["AAA1"]?.sentAt, FakeWhatsApp.t0)
     }
 
+    func testIdentitiesNamesAndSharedPhonesOnly() async throws {
+        try FakeWhatsApp.buildIdentities(in: dir)
+        try await writer.write { db in
+            try db.execute(sql: "INSERT INTO ZWAGROUPMEMBER VALUES (4, 1, '444444444@lid', '', NULL)")
+        }
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        defer { snap.close() }
+        let a = Dictionary(uniqueKeysWithValues: try snap.listAuthors(in: FakeWhatsApp.group).map { ($0.id, $0) })
+        XCTAssertEqual(a["111111111@lid"]?.displayName, "Alice")              // nom WhatsApp avant le nom de compte
+        XCTAssertNil(a["111111111@lid"]?.phone)                               // numéro présent mais non partagé
+        XCTAssertEqual(a["222222222@s.whatsapp.net"]?.phone, "+222222222")    // adressé par son numéro
+        XCTAssertEqual(a["333333333@lid"]?.displayName, "Chloé compte")
+        XCTAssertEqual(a["333333333@lid"]?.phone, "+33633333333")             // état de partage 1
+        XCTAssertEqual(a["444444444@lid"]?.displayName, "Denise Voisine")     // carnet d'adresses en priorité
+        XCTAssertEqual(a["444444444@lid"]?.phone, "+33644444444")
+    }
+
+    func testMissingIdentityDatabasesDegradeGracefully() async throws {
+        try "pas une base".write(to: dir.appendingPathComponent("LID.sqlite"), atomically: true, encoding: .utf8)
+        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        defer { snap.close() }
+        let a = Dictionary(uniqueKeysWithValues: try snap.listAuthors(in: FakeWhatsApp.group).map { ($0.id, $0) })
+        XCTAssertNil(a["333333333@lid"]?.phone)
+        XCTAssertEqual(a["222222222@s.whatsapp.net"]?.displayName, "Bruno")
+    }
+
     func testCursorFollowsInsertionOrderNotDate() async throws {
         let source = WhatsAppSource(databaseURL: dbURL)
         var snap = try await source.snapshot()

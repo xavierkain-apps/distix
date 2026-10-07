@@ -205,6 +205,19 @@ Colonnes obligatoires (arrêt propre si absentes) :
   décodent plus via le champ 5, signaler un changement de format, même si les colonnes
   sont intactes.
 
+## Noms et numéros : LID.sqlite et ContactsV2.sqlite (constaté le 2026-10-07)
+
+- `LID.sqlite`, table `ZWAZACCOUNT` : une ligne par compte. `ZIDENTIFIER` = JID `…@lid` complet (les 5 786
+  membres @lid des groupes s'y retrouvent tous), `ZDISPLAYNAME` (3 368 renseignés), `ZPHONENUMBER`
+  (renseigné pour 57 % des membres), `ZCURRENTPHONENUMBERSHARINGSTATE` : 0 sans numéro = 2 505,
+  0 avec numéro = 2 766, 1 avec numéro = 515 (1 ne va jamais sans numéro). Sens exact **non documenté**.
+- `ContactsV2.sqlite`, table `ZWAADDRESSBOOKCONTACT` : le carnet d'adresses (772 contacts), avec `ZLID`,
+  `ZWHATSAPPID`, `ZFULLNAME` (nom saisi par l'utilisateur) et `ZPHONENUMBER`.
+- Règle retenue (choix de Xavier : « seulement si partagé ») : numéro affiché pour un contact du carnet, un membre
+  adressé par son numéro (`@s.whatsapp.net`), ou un compte d'état 1. Interprétation prudente : l'état 0 avec
+  numéro n'est pas affiché. Les numéros ne sont jamais envoyés à l'IA.
+- Ces deux bases sont facultatives pour le connecteur : illisibles ou modifiées, on continue sans noms ni numéros.
+
 ## Points restant ouverts à la fin de la phase 0
 
 - Autorisation macOS nécessaire quand le script est lancé hors de l'app Claude (test

@@ -87,6 +87,29 @@ enum FakeWhatsApp {
         return q
     }
 
+    /// LID.sqlite et ContactsV2.sqlite factices, à côté de ChatStorage.sqlite.
+    static func buildIdentities(in dir: URL) throws {
+        let lid = try DatabaseQueue(path: dir.appendingPathComponent("LID.sqlite").path)
+        try lid.write { db in
+            try db.execute(sql: """
+                CREATE TABLE ZWAZACCOUNT (Z_PK INTEGER PRIMARY KEY, ZCURRENTPHONENUMBERSHARINGSTATE INTEGER,
+                  ZIDENTIFIER VARCHAR, ZDISPLAYNAME VARCHAR, ZPHONENUMBER VARCHAR);
+                INSERT INTO ZWAZACCOUNT VALUES (1, 0, '111111111@lid', 'Alice compte', '33611111111');
+                INSERT INTO ZWAZACCOUNT VALUES (2, 1, '333333333@lid', 'Chloé compte', '33 6 33 33 33 33');
+                INSERT INTO ZWAZACCOUNT VALUES (3, 0, '444444444@lid', NULL, NULL);
+                """)
+        }
+        let contacts = try DatabaseQueue(path: dir.appendingPathComponent("ContactsV2.sqlite").path)
+        try contacts.write { db in
+            try db.execute(sql: """
+                CREATE TABLE ZWAADDRESSBOOKCONTACT (Z_PK INTEGER PRIMARY KEY, ZLID VARCHAR, ZWHATSAPPID VARCHAR,
+                  ZFULLNAME VARCHAR, ZPHONENUMBER VARCHAR);
+                INSERT INTO ZWAADDRESSBOOKCONTACT VALUES (1, '444444444@lid', '33644444444@s.whatsapp.net',
+                  'Denise Voisine', '+33 6 44 44 44 44');
+                """)
+        }
+    }
+
     static func insert(_ messages: [Message], _ db: Database) throws {
         let chatJid: [Int64: String] = [1: group, 2: otherGroup, 3: privateChat]
         for m in messages {

@@ -152,7 +152,7 @@ struct OpportunityDetailView: View {
                         }
                     }
                     if contact.phone == nil {
-                        Text(L("Numéro non disponible sur ce Mac (WhatsApp masque certains membres). Retrouvez la personne par son nom dans le groupe pour lui écrire."))
+                        Text(L("Cette personne ne partage pas son numéro. Pour lui écrire : dans WhatsApp, ouvrez le groupe, touchez son nom (« \(contact.name) ») puis « Envoyer un message »."))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Text(L("Dans « \(model.conversationName(opportunity.conversationId)) », le \(opportunity.sentAt.formatted(date: .long, time: .shortened))"))
