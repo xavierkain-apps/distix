@@ -8,8 +8,8 @@ cd "$ROOT/app"
 
 ARCHS=(--arch arm64 --arch x86_64)
 if [[ "${DISTIX_ARCH:-universal}" == "native" ]]; then ARCHS=(); fi
-swift build -c release "${ARCHS[@]}"
-BIN="$(swift build -c release "${ARCHS[@]}" --show-bin-path)"
+swift build -c release ${ARCHS[@]+"${ARCHS[@]}"}
+BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
 APP="$ROOT/build/DistiX.app"
 rm -rf "$APP"
