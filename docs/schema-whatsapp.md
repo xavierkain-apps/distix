@@ -61,9 +61,10 @@ Un groupe se reconnaît au suffixe `@g.us` du `ZCONTACTJID` (292 groupes chez Xa
 
 **Constaté** : `ZMESSAGEDATE` est en **secondes depuis le 1er janvier 2001 UTC** (époque
 Core Data), en nombre flottant. Conversion : `unix = valeur + 978307200`, puis heure
-locale. Les bornes obtenues (2017 → aujourd'hui) sont cohérentes, et les heures
-affichées correspondent plausiblement à l'heure locale (**à confirmer par Xavier** en
-comparant avec l'app).
+locale. Les bornes obtenues (2017 → aujourd'hui) sont cohérentes. **Validé par Xavier
+le 2026-10-07** : sur les 30 derniers messages d'un groupe, les textes, heures, auteurs,
+réponses et réactions affichés par `diagnose.py messages` correspondent à l'app
+(vérification globale, pas message par message).
 
 ## Profondeur d'historique
 
@@ -203,3 +204,12 @@ Colonnes obligatoires (arrêt propre si absentes) :
 - un **contrôle de vraisemblance** : si plus de quelques pourcents des réponses ne se
   décodent plus via le champ 5, signaler un changement de format, même si les colonnes
   sont intactes.
+
+## Points restant ouverts à la fin de la phase 0
+
+- Autorisation macOS nécessaire quand le script est lancé hors de l'app Claude (test
+  depuis Terminal.app).
+- Réglage « export bloqué » : non identifié.
+- Types de message rares (12, 13, 46, 54, 59, 66, 75) : sens inconnu.
+- Mentions `@<numéro>` : à relier au membre mentionné (via `ZMEMBERJID`) en phase 1.
+- Doublons `@lid` / `@s.whatsapp.net` pour une même personne : non mesurés.
