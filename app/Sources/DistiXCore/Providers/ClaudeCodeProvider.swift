@@ -119,7 +119,8 @@ public struct ClaudeCodeProvider: LLMProvider {
                 // Garantit l'usage de l'abonnement : une clé API présente dans
                 // l'environnement serait utilisée (et facturée) à sa place. On retire
                 // aussi les variables d'une éventuelle session Claude Code parente.
-                for key in env.keys where key == "ANTHROPIC_API_KEY" || key == "CLAUDECODE"
+                let stripped: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDECODE"]
+                for key in env.keys where stripped.contains(key)
                     || (key.hasPrefix("CLAUDE_CODE_") && key != "CLAUDE_CODE_OAUTH_TOKEN") {
                     env.removeValue(forKey: key)
                 }
