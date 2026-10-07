@@ -1,0 +1,22 @@
+# Données réelles : ne jamais commiter (BRIEF §10)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+exports/
+out/
+fiches/
+fiches.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
