@@ -573,8 +573,13 @@ public final class Store: @unchecked Sendable {
         try writer.read { db in
             var out: [String: Int] = [:]
             for (k, sql) in [("messages", "SELECT COUNT(*) FROM messages"),
-                             ("messages non attribués", "SELECT COUNT(*) FROM messages WHERE attributed = 0"),
+                             ("messages en attente de traitement", "SELECT COUNT(*) FROM messages WHERE attributed = 0"),
                              ("messages rattachés à un fil", "SELECT COUNT(*) FROM thread_messages"),
+                             ("messages écartés (bavardage, hors sujet)", """
+                                SELECT COUNT(*) FROM messages m WHERE m.attributed = 1 AND m.kind IN ('text', 'media')
+                                AND NOT EXISTS (SELECT 1 FROM thread_messages tm WHERE tm.messageId = m.id)
+                                """),
+                             ("messages système ou supprimés", "SELECT COUNT(*) FROM messages WHERE kind IN ('system', 'deleted')"),
                              ("fils", "SELECT COUNT(*) FROM threads"),
                              ("fils écartés (sans fiche)", "SELECT COUNT(*) FROM threads WHERE skipReason IS NOT NULL"),
                              ("fiches", "SELECT COUNT(*) FROM fiches"),

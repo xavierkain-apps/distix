@@ -110,7 +110,8 @@ do {
         let r = try store.statistics()
         for (k, v) in r.sorted(by: { $0.key < $1.key }) { print("\(k) : \(v)") }
         if let run = try store.lastRun() {
-            print("dernière synchro : \(run.startedAt), jetons \(run.inputTokens)/\(run.outputTokens), \(String(format: "%.3f", run.costUSD)) $\(run.error.map { ", erreur : \($0)" } ?? "")")
+            let end = run.finishedAt.map { " → \($0)" } ?? " (en cours ou interrompue)"
+            print("dernière synchro : \(run.startedAt)\(end), jetons \(run.inputTokens)/\(run.outputTokens), \(String(format: "%.3f", run.costUSD)) $\(run.error.map { ", erreur : \($0)" } ?? "")")
         }
 
     case "export":

@@ -60,7 +60,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(summary.messagesRead, 40)
         XCTAssertEqual(summary.fichesCreated, 8)
         let stats = try store.statistics()
-        XCTAssertEqual(stats["messages non attribués"], 0)
+        XCTAssertEqual(stats["messages en attente de traitement"], 0)
         XCTAssertEqual(stats["fiches"], 8)
         XCTAssertEqual(stats["fiches non lues"], 8)
         let fiche = try store.fiches(.init()).first!
@@ -119,7 +119,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(second.messagesRead, 0)
         let stats = try store.statistics()
         XCTAssertEqual(stats["messages"], 40)
-        XCTAssertEqual(stats["messages non attribués"], 0)
+        XCTAssertEqual(stats["messages en attente de traitement"], 0)
         XCTAssertEqual(stats["fiches"], 8)
     }
 
@@ -195,7 +195,7 @@ final class PipelineTests: XCTestCase {
         XCTAssertNil(second.error)
         XCTAssertEqual(second.messagesRead, 30)
         XCTAssertEqual(try store.statistics()["messages"], 40)
-        XCTAssertEqual(try store.statistics()["messages non attribués"], 0)
+        XCTAssertEqual(try store.statistics()["messages en attente de traitement"], 0)
     }
 
     func testSkippedThreadsAreCountedWithReason() async throws {
