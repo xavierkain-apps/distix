@@ -44,8 +44,7 @@ let since = option("--since")
 let includeSources = flag("--sources")
 guard let command = args.first else { fail(usage) }
 
-let defaults = UserDefaults(suiteName: "com.xavierkain.distix") ?? .standard
-var settings = AppSettings.load(defaults)
+var settings = AppSettings.load(AppSettings.sharedDefaults)
 if let providerName {
     guard let kind = ProviderKind(rawValue: providerName) else { fail("Fournisseur inconnu : \(providerName)") }
     settings.provider = kind
@@ -109,6 +108,10 @@ do {
 
     case "check":
         print("WhatsApp : \(await source.checkAvailability())")
+        if settings.provider == .claudeCode {
+            let all = ClaudeCodeProvider.candidates(custom: settings.claudePath)
+            print("Claude Code : \(all.count) emplacement(s) trouvé(s), retenu : \(ClaudeCodeProvider.locate(custom: settings.claudePath)?.path ?? "aucun qui fonctionne")")
+        }
         do {
             let provider = try ProviderFactory.make(settings)
             let schema = Schema.object(["ok": Schema.boolean])

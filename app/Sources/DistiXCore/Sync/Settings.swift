@@ -52,6 +52,13 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     static let key = "DistiXSettings"
 
+    /// Réglages partagés entre l'app et distix-cli. Le CLI livré dans l'app a le même
+    /// identifiant de bundle : il lit alors les réglages standard.
+    public static var sharedDefaults: UserDefaults {
+        Bundle.main.bundleIdentifier == "com.xavierkain.distix"
+            ? .standard : (UserDefaults(suiteName: "com.xavierkain.distix") ?? .standard)
+    }
+
     public static func load(_ defaults: UserDefaults = .standard) -> AppSettings {
         guard let data = defaults.data(forKey: key),
               let s = try? JSONDecoder().decode(AppSettings.self, from: data) else { return AppSettings() }

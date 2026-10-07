@@ -222,7 +222,7 @@ struct AIProviderForm: View {
                 Text(L("Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir."))
                     .font(.callout).foregroundStyle(.secondary)
                 TextField(L("Chemin de claude (facultatif)"), text: $model.settings.claudePath,
-                          prompt: Text(ClaudeCodeProvider.locate()?.path ?? L("introuvable")))
+                          prompt: Text(ClaudeCodeProvider.candidates().first?.path ?? L("introuvable")))
             case .anthropic:
                 SecureField(L("Clé API"), text: $apiKey, prompt: Text("sk-ant-…"))
                 Text(L("La clé est conservée dans le Trousseau macOS.")).font(.callout).foregroundStyle(.secondary)
@@ -259,7 +259,7 @@ struct AIProviderForm: View {
         let settings = model.settings
         Task {
             do {
-                let provider = try ProviderFactory.make(settings)
+                let provider = try await Task.detached { try ProviderFactory.make(settings) }.value
                 struct R: Decodable { let ok: Bool }
                 _ = try await provider.generate(LLMRequest(system: "Réponds en JSON.", user: "Renvoie ok = true.",
                                                            schema: Schema.object(["ok": Schema.boolean]),

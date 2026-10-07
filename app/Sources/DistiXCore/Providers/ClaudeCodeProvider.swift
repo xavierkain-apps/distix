@@ -9,14 +9,51 @@ public struct ClaudeCodeProvider: LLMProvider {
 
     public init(executable: URL) { self.executable = executable }
 
-    /// Emplacements habituels du CLI ; une app lancée depuis le Finder n'a pas le PATH du shell.
+    /// Emplacements possibles du CLI, du plus probable au moins probable. Une app
+    /// lancée depuis le Finder n'a pas le PATH du shell. On cherche aussi le binaire
+    /// fourni par l'app Claude (claude-code/<version>[/<hash>]/claude.app), version la
+    /// plus récente d'abord, car les lanceurs du PATH peuvent être cassés.
+    public static func candidates(custom: String? = nil) -> [URL] {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        var paths = [custom].compactMap { $0 }.filter { !$0.isEmpty }
+        paths += ["\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
+                  "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
+        let root = URL(fileURLWithPath: "\(home)/Library/Application Support/Claude/claude-code")
+        let versions = ((try? fm.contentsOfDirectory(atPath: root.path)) ?? [])
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+        for v in versions {
+            let dir = root.appendingPathComponent(v)
+            var bases = [dir]
+            bases += ((try? fm.contentsOfDirectory(atPath: dir.path)) ?? []).sorted().map { dir.appendingPathComponent($0) }
+            for base in bases {
+                paths.append(base.appendingPathComponent("claude.app/Contents/MacOS/claude").path)
+                paths.append(base.appendingPathComponent("claude").path)
+            }
+        }
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted && fm.isExecutableFile(atPath: $0) && !$0.hasSuffix("/") }
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    /// Premier candidat qui fonctionne réellement (`claude --version` réussit) :
+    /// un lanceur peut être exécutable mais cassé.
     public static func locate(custom: String? = nil) -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        var candidates = [custom].compactMap { $0 }.filter { !$0.isEmpty }
-        candidates += ["\(home)/.local/bin/claude", "\(home)/.claude/local/claude",
-                       "/opt/homebrew/bin/claude", "/usr/local/bin/claude"]
-        return candidates.map { URL(fileURLWithPath: $0) }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+        candidates(custom: custom).first { works($0) }
+    }
+
+    static func works(_ url: URL) -> Bool {
+        let p = Process()
+        p.executableURL = url
+        p.arguments = ["--version"]
+        p.standardOutput = Pipe()
+        p.standardError = Pipe()
+        p.standardInput = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return false }
+        let deadline = Date().addingTimeInterval(15)
+        while p.isRunning && Date() < deadline { usleep(50_000) }
+        if p.isRunning { p.terminate(); return false }
+        return p.terminationStatus == 0
     }
 
     public func complete(_ request: LLMRequest) async throws -> (json: Data, usage: LLMUsage) {
