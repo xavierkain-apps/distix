@@ -73,11 +73,15 @@ class DiagnoseTest(unittest.TestCase):
             msgs = diagnose.recent_messages(conn, 1)
         by_pk = {m["pk"]: m for m in msgs}
         self.assertEqual(by_pk[1]["author"], "Alice Martin")
-        self.assertEqual(by_pk[2]["author"], "Bruno")
+        self.assertEqual(by_pk[1]["author_source"], "ZWAGROUPMEMBER.ZCONTACTNAME")
+        self.assertEqual(by_pk[2]["author"], "Bruno")       # ZCONTACTNAME vide -> profil
+        self.assertEqual(by_pk[2]["author_source"], "ZWAPROFILEPUSHNAME")
         self.assertEqual(by_pk[3]["author"], "moi")
-        self.assertEqual(by_pk[5]["author"], "Chloé")
+        self.assertEqual(by_pk[5]["author"], "Chloé")       # ZPUSHNAME base64 décodé
+        self.assertEqual(by_pk[5]["author_jid"], "333@lid")  # jamais le JID du groupe
         self.assertEqual(by_pk[2]["reply_to"], "AAA1")
         self.assertIsNone(by_pk[1]["reply_to"])
+        self.assertEqual(by_pk[2]["reactions"], {"👍": 2})
 
     def test_core_data_date(self):
         dt = diagnose.to_datetime(fake_db.core_date(fake_db.T0))
@@ -87,11 +91,13 @@ class DiagnoseTest(unittest.TestCase):
         _, out = self.run_cli("report")
         for secret in ("Faut-il vendre", "continue à sourcer", "Secret", "Message privé",
                        "Investisseurs", "Club Lecture", "Maman", "Alice", "Bruno", "Chloé",
-                       "AAA1", "111@lid", "👍"):
+                       "AAA1", "111@lid", "👍", "RID1"):
             self.assertNotIn(secret, out, secret)
         self.assertIn("id_message_connu", out)          # lien de réponse détecté
         self.assertIn("type 0 : 1/1", out)
         self.assertIn("emoji", out)                     # réaction détectée
+        self.assertIn("1 messages de groupe ont au moins une réaction, 2 réactions", out)
+        self.assertIn("base64+protobuf = 1", out)
 
     def test_schema_change_is_reported_cleanly(self):
         self.writer.execute("ALTER TABLE ZWAMESSAGE RENAME COLUMN ZTEXT TO ZBODY")

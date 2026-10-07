@@ -21,9 +21,10 @@ GROUPE est un morceau du nom (insensible à la casse) ou le JID complet (…@g.u
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import contextlib
 import hashlib
-import os
 import re
 import shutil
 import sqlite3
@@ -269,8 +270,14 @@ def find_group(conn, query: str) -> dict:
 # --------------------------------------------------------------------------
 
 def _author_resolver(conn, chat_pk: int):
-    """Construit une fonction (row) -> nom d'auteur, selon les colonnes présentes."""
-    members: dict[int, tuple[str | None, str | None]] = {}
+    """Construit une fonction -> (jid, nom, source du nom), selon les colonnes présentes.
+
+    Constaté (rapport 2026-10-07) : dans un groupe, ZFROMJID vaut le JID du groupe ;
+    l'auteur est ZGROUPMEMBER -> ZWAGROUPMEMBER.ZMEMBERJID (surtout des @lid).
+    ZCONTACTNAME est souvent une chaîne vide, et ZWAMESSAGE.ZPUSHNAME n'est pas
+    un nom en clair.
+    """
+    members: dict[int, tuple[str | None, str | None, str | None]] = {}
     if has(conn, "ZWAGROUPMEMBER", "ZMEMBERJID"):
         cs = colset(conn, "ZWAGROUPMEMBER")
         name_cols = [c for c in ("ZCONTACTNAME", "ZFIRSTNAME") if c in cs]
@@ -278,30 +285,60 @@ def _author_resolver(conn, chat_pk: int):
         where = " WHERE ZCHATSESSION = ?" if "ZCHATSESSION" in cs else ""
         args = (chat_pk,) if where else ()
         for r in conn.execute(f"SELECT {sel} FROM ZWAGROUPMEMBER{where}", args):
-            name = next((v for v in r[2:] if v), None)
-            members[r[0]] = (r[1], name)
+            named = [(c, v.strip()) for c, v in zip(name_cols, r[2:]) if v and v.strip()]
+            members[r[0]] = (r[1],) + (named[0] if named else (None, None))
     push: dict[str, str] = {}
     if has(conn, "ZWAPROFILEPUSHNAME", "ZPUSHNAME") and has(conn, "ZWAPROFILEPUSHNAME", "ZJID"):
-        push = {j: n for j, n in conn.execute("SELECT ZJID, ZPUSHNAME FROM ZWAPROFILEPUSHNAME") if n}
+        push = {j: n.strip() for j, n in conn.execute(
+            "SELECT ZJID, ZPUSHNAME FROM ZWAPROFILEPUSHNAME") if n and n.strip()}
 
-    def resolve(is_from_me, group_member, from_jid, push_name) -> tuple[str, str]:
+    def resolve(is_from_me, group_member, from_jid, raw_pushname) -> tuple[str, str, str]:
         if is_from_me:
-            return "moi", "moi"
-        jid, name = members.get(group_member, (None, None)) if group_member else (None, None)
-        jid = jid or from_jid
-        name = name or push_name or (push.get(jid) if jid else None)
-        return (jid or "?"), (name or jid or "?")
+            return "moi", "moi", "moi"
+        jid, col, name = members.get(group_member, (None, None, None)) if group_member else (None, None, None)
+        if not jid and from_jid and not from_jid.endswith(GROUP_SUFFIX):
+            jid = from_jid
+        if name:
+            return jid or "?", name, f"ZWAGROUPMEMBER.{col}"
+        if jid and push.get(jid):
+            return jid, push[jid], "ZWAPROFILEPUSHNAME"
+        decoded = decode_pushname(raw_pushname)
+        if decoded:
+            return jid or "?", decoded, "ZWAMESSAGE.ZPUSHNAME décodé"
+        return jid or "?", jid or "?", "aucun"
     return resolve
 
 
-def _decode_pushname(v) -> str | None:
+B64_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+
+
+def pushname_layers(v) -> tuple[str, list[tuple[str, str, object]]]:
+    """Décode ZWAMESSAGE.ZPUSHNAME : (format, feuilles protobuf éventuelles)."""
     if v is None:
-        return None
-    if isinstance(v, bytes):
-        # Parfois stocké en blob ; on prend la plus longue chaîne lisible.
-        strings = [s for _, s in pb_strings(v)] or [v.decode("utf-8", "replace")]
-        return max(strings, key=len)
-    return str(v)
+        return "nul", []
+    raw = v
+    fmt = "blob"
+    if isinstance(v, str):
+        if not (B64_RE.match(v) and len(v) % 4 == 0):
+            return "texte", []
+        try:
+            raw = base64.b64decode(v, validate=True)
+        except (ValueError, binascii.Error):
+            return "texte", []
+        fmt = "base64"
+    try:
+        pb_parse(bytes(raw))
+    except ValueError:
+        return fmt + "+opaque", []
+    return fmt + "+protobuf", list(pb_leaves(bytes(raw)))
+
+
+def decode_pushname(v) -> str | None:
+    if isinstance(v, str) and not B64_RE.match(v):
+        return v.strip() or None
+    _, leaves = pushname_layers(v)
+    names = [x for _, kind, x in leaves if kind == "str" and not JID_RE.match(x)]
+    return max(names, key=len) if names else None
 
 
 def recent_messages(conn, chat_pk: int, limit: int = 30) -> list[dict]:
@@ -318,40 +355,58 @@ def recent_messages(conn, chat_pk: int, limit: int = 30) -> list[dict]:
     resolve = _author_resolver(conn, chat_pk)
 
     reply_ids = quoted_stanza_ids(conn, chat_pk, [r[0] for r in rows])
+    reacts = reactions(conn, [r[0] for r in rows])
     out = []
     for r in rows:
         d = dict(zip(names, r))
-        jid, author = resolve(d["from_me"], d.get("groupmember"), d.get("fromjid"),
-                              _decode_pushname(d.get("pushname")))
-        d["author_jid"], d["author"] = jid, author
+        jid, author, source = resolve(d["from_me"], d.get("groupmember"), d.get("fromjid"),
+                                      d.get("pushname"))
+        d["author_jid"], d["author"], d["author_source"] = jid, author, source
         d["reply_to"] = reply_ids.get(d["pk"])
+        d["reactions"] = reacts.get(d["pk"], Counter())
         out.append(d)
     return out
 
 
-def quoted_stanza_ids(conn, chat_pk: int, message_pks: list[int]) -> dict[int, str]:
-    """Message -> identifiant (stanza) du message cité, si on le retrouve.
+# Constaté (rapport 2026-10-07) : dans ZWAMEDIAITEM.ZMETADATA, le champ 5 contient
+# l'identifiant (stanza) du message cité et le champ 6 le JID de son auteur.
+REPLY_ID_PATH, REPLY_AUTHOR_PATH = "5", "6"
+# Dans ZWAMESSAGEINFO.ZRECEIPTINFO, le champ 7 regroupe les réactions
+# (7.1.2 : JID de l'auteur, 7.1.3 : emoji).
+REACTIONS_FIELD = "7"
 
-    Cherche, dans le blob ZWAMEDIAITEM.ZMETADATA du message, une chaîne égale
-    à l'identifiant d'un autre message de la même conversation. Méthode
-    empirique : le rapport dit si elle est fiable.
-    """
+
+def quoted_stanza_ids(conn, chat_pk: int, message_pks: list[int]) -> dict[int, str]:
+    """Message -> identifiant (stanza) du message cité, d'après ZMETADATA champ 5."""
     if not message_pks or not (has(conn, "ZWAMEDIAITEM", "ZMETADATA")
-                               and has(conn, "ZWAMEDIAITEM", "ZMESSAGE")
-                               and has(conn, "ZWAMESSAGE", "ZSTANZAID")):
+                               and has(conn, "ZWAMEDIAITEM", "ZMESSAGE")):
         return {}
-    stanzas = {r[0] for r in conn.execute(
-        "SELECT ZSTANZAID FROM ZWAMESSAGE WHERE ZCHATSESSION = ? AND ZSTANZAID IS NOT NULL",
-        (chat_pk,))}
     marks = ",".join("?" * len(message_pks))
     out = {}
     for msg, blob in conn.execute(
             f"SELECT ZMESSAGE, ZMETADATA FROM ZWAMEDIAITEM "
             f"WHERE ZMESSAGE IN ({marks}) AND ZMETADATA IS NOT NULL", message_pks):
-        for _, s in pb_strings(blob):
-            if s in stanzas:
+        for path, s in pb_strings(blob):
+            if path == REPLY_ID_PATH:
                 out[msg] = s
                 break
+    return out
+
+
+def reactions(conn, message_pks: list[int]) -> dict[int, Counter]:
+    """Message -> compteur d'emoji de réaction, d'après ZRECEIPTINFO champ 7."""
+    if not message_pks or not (has(conn, "ZWAMESSAGEINFO", "ZRECEIPTINFO")
+                               and has(conn, "ZWAMESSAGEINFO", "ZMESSAGE")):
+        return {}
+    marks = ",".join("?" * len(message_pks))
+    out: dict[int, Counter] = {}
+    for msg, blob in conn.execute(
+            f"SELECT ZMESSAGE, ZRECEIPTINFO FROM ZWAMESSAGEINFO "
+            f"WHERE ZMESSAGE IN ({marks}) AND ZRECEIPTINFO IS NOT NULL", message_pks):
+        c = Counter(v for path, v in pb_strings(blob)
+                    if path.split(".")[0] == REACTIONS_FIELD and looks_emoji(v))
+        if c:
+            out[msg] = c
     return out
 
 
@@ -617,6 +672,87 @@ def section_authors(conn, out: list[str]):
     out.append("")
 
 
+def section_names(conn, out: list[str]):
+    out.append("## Noms des auteurs (groupes uniquement)\n")
+    pks = _group_pks(conn)
+    if not pks:
+        return
+    if has(conn, "ZWAGROUPMEMBER", "ZCONTACTNAME"):
+        empty, filled = conn.execute(
+            "SELECT SUM(TRIM(ZCONTACTNAME) = ''), SUM(TRIM(ZCONTACTNAME) != '') FROM ZWAGROUPMEMBER"
+        ).fetchone()
+        out.append(f"- ZWAGROUPMEMBER.ZCONTACTNAME : {filled or 0} renseignés, {empty or 0} chaînes vides")
+    if has(conn, "ZWAGROUPMEMBER", "ZFIRSTNAME"):
+        n = conn.execute("SELECT COUNT(*) FROM ZWAGROUPMEMBER WHERE TRIM(ZFIRSTNAME) != ''").fetchone()[0]
+        out.append(f"- ZWAGROUPMEMBER.ZFIRSTNAME renseignés : {n}")
+    if has(conn, "ZWAPROFILEPUSHNAME", "ZJID") and has(conn, "ZWAGROUPMEMBER", "ZMEMBERJID"):
+        n, k = conn.execute(
+            "SELECT COUNT(DISTINCT g.ZMEMBERJID), COUNT(DISTINCT p.ZJID) FROM ZWAGROUPMEMBER g "
+            "LEFT JOIN ZWAPROFILEPUSHNAME p ON p.ZJID = g.ZMEMBERJID").fetchone()
+        out.append(f"- membres distincts : {n}, dont {k} ({_pct(k, n)}) ont un nom dans ZWAPROFILEPUSHNAME")
+    out.append("")
+    cols = colset(conn, "ZWAMESSAGE")
+    marks = ",".join("?" * len(pks))
+    if "ZPUSHNAME" in cols:
+        rows = conn.execute(
+            f"SELECT ZPUSHNAME FROM ZWAMESSAGE WHERE ZCHATSESSION IN ({marks}) AND ZISFROMME = 0 "
+            f"AND ZPUSHNAME IS NOT NULL LIMIT 20000", pks).fetchall()
+        fmts, paths = Counter(), defaultdict(Counter)
+        lengths = Counter()
+        for (v,) in rows:
+            fmt, leaves = pushname_layers(v)
+            fmts[fmt] += 1
+            lengths[len(v) if isinstance(v, (str, bytes)) else 0] += 1
+            seen = set()
+            for path, kind, x in leaves:
+                cat = classify_string(x, set()) if kind == "str" else kind
+                if (path, cat) not in seen:
+                    paths[path][cat] += 1
+                    seen.add((path, cat))
+        out.append("ZWAMESSAGE.ZPUSHNAME, format : " + ", ".join(f"{k} = {v}" for k, v in fmts.most_common()))
+        out.append("- longueurs les plus fréquentes : " + ", ".join(f"{k} car. = {v}" for k, v in lengths.most_common(5)))
+        if paths:
+            out.append("- structure décodée : " + "; ".join(
+                f"{p} → " + ", ".join(f"{k} : {v}" for k, v in paths[p].most_common())
+                for p in sorted(paths)))
+        out.append("")
+    # Couverture de la résolution des noms, sur un échantillon de messages reçus.
+    sources = Counter()
+    for (chat,) in conn.execute(
+            f"SELECT ZCHATSESSION FROM ZWAMESSAGE WHERE ZCHATSESSION IN ({marks}) "
+            f"GROUP BY ZCHATSESSION ORDER BY COUNT(*) DESC LIMIT 5", pks).fetchall():
+        resolve = _author_resolver(conn, chat)
+        sel = ", ".join(c if c in cols else "NULL" for c in ("ZGROUPMEMBER", "ZFROMJID", "ZPUSHNAME"))
+        for gm, fj, pn in conn.execute(
+                f"SELECT {sel} FROM ZWAMESSAGE WHERE ZCHATSESSION = ? AND ZISFROMME = 0 "
+                f"ORDER BY ZMESSAGEDATE DESC LIMIT 2000", (chat,)):
+            sources[resolve(0, gm, fj, pn)[2]] += 1
+    total = sum(sources.values())
+    out.append("Résolution des noms (5 groupes les plus actifs, 2000 derniers messages reçus chacun) : "
+               + ", ".join(f"{k} = {v} ({_pct(v, total)})" for k, v in sources.most_common()) + "\n")
+    mentions = conn.execute(
+        f"SELECT COUNT(*) FROM ZWAMESSAGE WHERE ZCHATSESSION IN ({marks}) "
+        f"AND ZTEXT GLOB '*@[0-9][0-9][0-9][0-9][0-9][0-9]*'", pks).fetchone()[0]
+    out.append(f"Messages contenant une mention « @<numéro> » : {mentions}\n")
+
+
+def section_reaction_counts(conn, out: list[str]):
+    pks = _group_pks(conn)
+    if not pks or not has(conn, "ZWAMESSAGEINFO", "ZRECEIPTINFO"):
+        return
+    marks = ",".join("?" * len(pks))
+    msg_pks = [r[0] for r in conn.execute(
+        f"SELECT Z_PK FROM ZWAMESSAGE WHERE ZCHATSESSION IN ({marks}) AND ZMESSAGEINFO IS NOT NULL"
+        if "ZMESSAGEINFO" in colset(conn, "ZWAMESSAGE") else
+        f"SELECT Z_PK FROM ZWAMESSAGE WHERE ZCHATSESSION IN ({marks})", pks)]
+    found: dict[int, Counter] = {}
+    for i in range(0, len(msg_pks), 900):
+        found.update(reactions(conn, msg_pks[i:i + 900]))
+    n_react = sum(sum(c.values()) for c in found.values())
+    out.append(f"Réactions lues via le champ {REACTIONS_FIELD} : {len(found)} messages de groupe "
+               f"ont au moins une réaction, {n_react} réactions au total.\n")
+
+
 def _blob_structure(rows, stanzas: set[str], title: str, out: list[str]):
     """Histogramme des chemins protobuf par catégorie de valeur (sans contenu)."""
     paths: dict[str, Counter] = defaultdict(Counter)
@@ -738,7 +874,8 @@ def build_report(conn, db: Path) -> str:
         out.append("**Schéma incompatible : sections suivantes non calculées.**\n")
         return "\n".join(out)
     for section in (section_sessions, section_history, section_types, section_authors,
-                    section_replies, section_reactions, section_group_settings):
+                    section_names, section_replies, section_reactions, section_reaction_counts,
+                    section_group_settings):
         try:
             section(conn, out)
         except sqlite3.Error as e:
@@ -784,13 +921,17 @@ def cmd_messages(conn, args) -> str:
         t = m["type"]
         kind = f"type {t} ({TYPE_GUESS.get(t, '?')})"
         text = (m["text"] or "").replace("\n", " ⏎ ")
-        lines.append(f"{fmt_dt(m['date'])}  {m['author']}  · {kind}")
+        lines.append(f"{fmt_dt(m['date'])}  {m['author']}  · {kind}  · nom : {m['author_source']}")
         if m["reply_to"]:
             target = by_stanza.get(m["reply_to"])
             where = f"{fmt_dt(target['date'])} {target['author']}" if target else "hors fenêtre"
             lines.append(f"    ↳ en réponse à {m['reply_to']} ({where})")
         if text:
             lines.append(f"    {text}")
+        if m["reactions"]:
+            lines.append("    réactions : " + " ".join(f"{e}×{n}" for e, n in m["reactions"].most_common()))
+    sources = Counter(m["author_source"] for m in msgs)
+    lines.append("\nOrigine des noms : " + ", ".join(f"{k} = {v}" for k, v in sources.most_common()))
     return "\n".join(lines)
 
 

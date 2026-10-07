@@ -1,10 +1,13 @@
 """Base factice au format de ChatStorage.sqlite, pour les tests.
 
-Structure reprise de l'hypothèse du brief (section 4.2). Elle sera alignée sur le
-schéma réel une fois celui-ci documenté dans docs/schema-whatsapp.md.
+Reproduit les particularités constatées sur la vraie base (docs/schema-whatsapp.md) :
+ZFROMJID = JID du groupe pour les messages reçus, auteur via ZGROUPMEMBER,
+ZCONTACTNAME souvent vide, ZPUSHNAME en base64, lien de réponse dans le champ 5
+de ZMETADATA, réactions dans le champ 7 de ZRECEIPTINFO. Aucune donnée réelle.
 """
 from __future__ import annotations
 
+import base64
 import sqlite3
 from pathlib import Path
 
@@ -77,15 +80,16 @@ def build(path: Path, wal: bool = True) -> Path:
     conn.executemany(
         "INSERT INTO ZWAGROUPMEMBER VALUES (?,?,?,?,?)",
         [(1, 1, "111@lid", "Alice Martin", None),
-         (2, 1, "222@s.whatsapp.net", None, "Bruno")])
-    conn.execute("INSERT INTO ZWAPROFILEPUSHNAME VALUES (1, '333@lid', 'Chloé')")
+         (2, 1, "222@s.whatsapp.net", "", None),
+         (3, 1, "333@lid", "", None)])
+    conn.execute("INSERT INTO ZWAPROFILEPUSHNAME VALUES (1, '222@s.whatsapp.net', 'Bruno')")
     msgs = [
         # pk, chat, member, media, fromme, type, event, date, stanza, fromjid, text
-        (1, 1, 1, None, 0, 0, 0, T0, "AAA1", "111@lid", "Faut-il vendre avant d'acheter ?"),
-        (2, 1, 2, 1, 0, 0, 0, T0 + 60, "AAA2", "222@s.whatsapp.net", "Non, continue à sourcer."),
-        (3, 1, None, None, 1, 0, 0, T0 + 120, "AAA3", None, "Merci !"),
-        (4, 1, None, None, 0, 6, 2, T0 + 180, "AAA4", None, None),
-        (5, 1, None, 2, 0, 1, 0, T0 + 240, "AAA5", "333@lid", None),
+        (1, 1, 1, None, 0, 0, 2, T0, "AAA1", GROUP_JID, "Faut-il vendre avant d'acheter ?"),
+        (2, 1, 2, 1, 0, 0, 2, T0 + 60, "AAA2", GROUP_JID, "Non, continue à sourcer."),
+        (3, 1, None, None, 1, 0, 2, T0 + 120, "AAA3", None, "Merci !"),
+        (4, 1, None, None, 0, 6, 15, T0 + 180, "AAA4", GROUP_JID, None),
+        (5, 1, 3, 2, 0, 1, 2, T0 + 240, "AAA5", GROUP_JID, None),
         (6, 2, None, None, 0, 0, 0, T0, "BBB1", "444@lid", "Secret d'un autre groupe"),
         (7, 3, None, None, 0, 0, 0, T0, "CCC1", PRIVATE_JID, "Message privé"),
     ]
@@ -94,12 +98,17 @@ def build(path: Path, wal: bool = True) -> Path:
         " ZMESSAGETYPE, ZGROUPEVENTTYPE, ZMESSAGEDATE, ZSTANZAID, ZFROMJID, ZTEXT)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         [m[:7] + (core_date(m[7]),) + m[8:] for m in msgs])
-    reply_meta = pb_field(1, 3) + pb_field(5, pb_field(1, "AAA1") + pb_field(2, "111@lid"))
+    pushname = base64.b64encode(pb_field(1, "Chloé") + pb_field(2, 7)).decode()
+    conn.execute("UPDATE ZWAMESSAGE SET ZPUSHNAME = ? WHERE Z_PK = 5", (pushname,))
+    reply_meta = pb_field(4, "Faut-il vendre") + pb_field(5, "AAA1") + pb_field(6, "111@lid")
     conn.executemany("INSERT INTO ZWAMEDIAITEM VALUES (?,?,?,?,?,?)",
                      [(1, 2, None, None, None, reply_meta),
                       (2, 5, None, "Media/x.jpg", 1000, pb_field(3, 42))])
     conn.execute("INSERT INTO ZWAMESSAGEINFO VALUES (1, 2, ?)",
-                 (pb_field(4, pb_field(1, "111@lid") + pb_field(2, "👍")),))
+                 (pb_field(4, 1) + pb_field(7, pb_field(1, pb_field(1, "RID1") + pb_field(2, "111@lid")
+                                                             + pb_field(3, "👍") + pb_field(4, 9))
+                                           + pb_field(1, pb_field(1, "RID2") + pb_field(2, "333@lid")
+                                                             + pb_field(3, "👍") + pb_field(4, 9))),))
     conn.commit()
     conn.close()
     return path
