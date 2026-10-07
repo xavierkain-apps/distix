@@ -43,21 +43,63 @@ public final class Pipeline: @unchecked Sendable {
                                                      usage: &stats.usage) else { break }
             stats.windows += 1
         }
-        let threads = try store.threadsNeedingFiche(in: conversationId)
-        var done = Set<String>()
-        for (i, t) in threads.enumerated() {
-            try Task.checkCancellation()
-            progress(String(localized: "Rédaction des fiches : \(i + 1)/\(threads.count)", bundle: CoreResources.bundle))
+        try await writeFiches(conversationId: conversationId, pseudo: pseudo, progress: progress)
+    }
+
+    private enum Job: Sendable {
+        case create(Int64)
+        case regenerate(String)
+    }
+
+    /// Rédige les fiches des fils modifiés, plusieurs à la fois, puis cherche les
+    /// doublons parmi les nouvelles fiches (dans l'ordre chronologique).
+    private func writeFiches(conversationId: String, pseudo: Pseudonymizer,
+                             progress: @Sendable (String) -> Void) async throws {
+        var jobs: [Job] = []
+        var seen = Set<String>()
+        for t in try store.threadsNeedingFiche(in: conversationId) {
             if let fid = try store.ficheId(forThread: t.id!) {
-                guard done.insert(fid).inserted else { continue }
-                if try await regenerate(ficheId: fid) { stats.fichesUpdated += 1 }
-            } else if let created = try await createFiche(conversationId: conversationId, threadIds: [t.id!], pseudo: pseudo) {
-                stats.fichesCreated += 1
-                done.insert(created.id)
-                if let target = try await findMergeTarget(for: created) {
-                    try await merge(created, into: target)
-                    done.insert(target)
+                if seen.insert(fid).inserted { jobs.append(.regenerate(fid)) }
+            } else {
+                jobs.append(.create(t.id!))
+            }
+        }
+        guard !jobs.isEmpty else { return }
+        var created: [FicheRecord] = []
+        var finished = 0
+        try await withThrowingTaskGroup(of: (FicheRecord?, Bool, LLMUsage).self) { group in
+            var pending = jobs[...]
+            func enqueue(_ job: Job) {
+                group.addTask { [self] in
+                    var usage = LLMUsage()
+                    switch job {
+                    case .create(let threadId):
+                        let fiche = try await createFiche(conversationId: conversationId, threadIds: [threadId],
+                                                          pseudo: pseudo, usage: &usage)
+                        return (fiche, false, usage)
+                    case .regenerate(let id):
+                        let changed = try await regenerate(ficheId: id, usage: &usage)
+                        return (nil, changed, usage)
+                    }
                 }
+            }
+            for _ in 0..<max(1, settings.concurrency) {
+                if let job = pending.popFirst() { enqueue(job) }
+            }
+            while let (fiche, changed, usage) = try await group.next() {
+                stats.usage += usage
+                finished += 1
+                if let fiche { created.append(fiche); stats.fichesCreated += 1 }
+                if changed { stats.fichesUpdated += 1 }
+                progress(String(localized: "Rédaction des fiches : \(finished)/\(jobs.count)", bundle: CoreResources.bundle))
+                if let job = pending.popFirst() { enqueue(job) }
+            }
+        }
+        for fiche in created.sorted(by: { $0.firstMessageAt < $1.firstMessageAt }) {
+            try Task.checkCancellation()
+            guard let current = try store.fiche(fiche.id) else { continue }   // déjà fusionnée
+            if let target = try await findMergeTarget(for: current) {
+                try await merge(current, into: target)
             }
         }
     }
@@ -65,10 +107,10 @@ public final class Pipeline: @unchecked Sendable {
     // MARK: Création et régénération
 
     func createFiche(conversationId: String, threadIds: [Int64], pseudo: Pseudonymizer,
-                     id: String = UUID().uuidString) async throws -> FicheRecord? {
+                     usage: inout LLMUsage) async throws -> FicheRecord? {
         let writer = FicheWriter(store: store, provider: provider, settings: settings)
         let result = try await writer.write(conversationId: conversationId, threadIds: threadIds, previous: nil,
-                                            pseudo: pseudo, usage: &stats.usage)
+                                            pseudo: pseudo, usage: &usage)
         for t in threadIds where !result.threadSummary.isEmpty {
             try store.updateThreadSummary(t, summary: result.threadSummary)
         }
@@ -76,7 +118,7 @@ public final class Pipeline: @unchecked Sendable {
         guard let content = result.content else { return nil }
         let messages = try store.messages(ofThreads: threadIds)
         let fiche = FicheRecord(
-            id: id, conversationId: conversationId,
+            id: UUID().uuidString, conversationId: conversationId,
             themeId: try store.themeId(named: content.theme, in: conversationId),
             status: content.status, question: content.question,
             content: try JSONEncoder.distix.encode(content),
@@ -90,14 +132,15 @@ public final class Pipeline: @unchecked Sendable {
     /// Régénère une fiche à partir de tous ses fils. Renvoie true si le fond a changé
     /// (la fiche redevient alors non lue).
     @discardableResult
-    func regenerate(ficheId: String, forceUnread: Bool = false, note: String? = nil) async throws -> Bool {
+    func regenerate(ficheId: String, forceUnread: Bool = false, note: String? = nil,
+                    usage: inout LLMUsage) async throws -> Bool {
         guard var fiche = try store.fiche(ficheId) else { return false }
         let threadIds = try store.threadIds(ofFiche: ficheId)
         let messages = try store.messages(ofThreads: threadIds)
         let pseudo = try pseudonymizer(for: [fiche.conversationId] + messages.map(\.conversationId))
         let writer = FicheWriter(store: store, provider: provider, settings: settings)
         let result = try await writer.write(conversationId: fiche.conversationId, threadIds: threadIds,
-                                            previous: fiche.decoded, pseudo: pseudo, usage: &stats.usage)
+                                            previous: fiche.decoded, pseudo: pseudo, usage: &usage)
         try store.clearNeedsFiche(threadIds)
         guard let content = result.content else { return false }
         let changed = forceUnread || result.materialChange
@@ -145,15 +188,20 @@ public final class Pipeline: @unchecked Sendable {
         return nil
     }
 
-    /// Regroupe les fils de `fiche` sous `target` et régénère la fiche cible.
-    func merge(_ fiche: FicheRecord, into target: String) async throws {
-        let threads = try store.threadIds(ofFiche: fiche.id)
-        try store.moveThreads(threads, from: fiche.id, to: target)
-        try store.deleteFiche(fiche.id)
+    /// Regroupe deux fiches : la plus récente rejoint la plus ancienne, qui est régénérée.
+    func merge(_ fiche: FicheRecord, into candidateId: String) async throws {
+        guard let candidate = try store.fiche(candidateId) else { return }
+        let (source, target) = candidate.firstMessageAt <= fiche.firstMessageAt ? (fiche, candidate) : (candidate, fiche)
+        let threads = try store.threadIds(ofFiche: source.id)
+        try store.moveThreads(threads, from: source.id, to: target.id)
+        try store.deleteFiche(source.id)
         stats.fichesCreated -= 1
         stats.merges += 1
-        try await regenerate(ficheId: target, forceUnread: true,
-                             note: String(localized: "Question similaire posée à nouveau, fiche enrichie.", bundle: CoreResources.bundle))
+        var usage = LLMUsage()
+        try await regenerate(ficheId: target.id, forceUnread: true,
+                             note: String(localized: "Question similaire posée à nouveau, fiche enrichie.", bundle: CoreResources.bundle),
+                             usage: &usage)
+        stats.usage += usage
     }
 
     /// Défait les fusions d'une fiche : chaque fiche d'origine est recréée (avec son
@@ -180,6 +228,8 @@ public final class Pipeline: @unchecked Sendable {
             try store.saveFiche(restored, threadIds: [])
             try store.detachThreads(threadIds, to: originalId)
         }
-        try await regenerate(ficheId: ficheId)
+        var usage = LLMUsage()
+        try await regenerate(ficheId: ficheId, usage: &usage)
+        stats.usage += usage
     }
 }

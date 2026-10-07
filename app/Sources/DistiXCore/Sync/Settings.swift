@@ -26,6 +26,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var threadOpenDays = 7
     public var mergeThreshold = 0.80
     public var crossGroupMerge = false
+    /// Fiches rédigées en parallèle.
+    public var concurrency = 3
     // État
     public var onboardingDone = false
 
@@ -74,6 +76,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showRealNames = v(.showRealNames, showRealNames); windowSize = v(.windowSize, windowSize)
         windowOverlap = v(.windowOverlap, windowOverlap); threadOpenDays = v(.threadOpenDays, threadOpenDays)
         mergeThreshold = v(.mergeThreshold, mergeThreshold); crossGroupMerge = v(.crossGroupMerge, crossGroupMerge)
+        concurrency = v(.concurrency, concurrency)
         onboardingDone = v(.onboardingDone, onboardingDone)
     }
 }

@@ -76,6 +76,13 @@ public struct ClaudeCodeProvider: LLMProvider {
                 try? FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
                 p.currentDirectoryURL = cwd
                 var env = ProcessInfo.processInfo.environment
+                // Garantit l'usage de l'abonnement : une clé API présente dans
+                // l'environnement serait utilisée (et facturée) à sa place. On retire
+                // aussi les variables d'une éventuelle session Claude Code parente.
+                for key in env.keys where key == "ANTHROPIC_API_KEY" || key == "CLAUDECODE"
+                    || (key.hasPrefix("CLAUDE_CODE_") && key != "CLAUDE_CODE_OAUTH_TOKEN") {
+                    env.removeValue(forKey: key)
+                }
                 let home = FileManager.default.homeDirectoryForCurrentUser.path
                 env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
                 p.environment = env

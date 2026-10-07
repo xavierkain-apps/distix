@@ -269,7 +269,7 @@ public final class Store: @unchecked Sendable {
 
     public func clearNeedsFiche(_ threadIds: [Int64]) throws {
         try writer.write { db in
-            try ThreadRecord.filter(threadIds.contains(Column("id"))).updateAll(db, Column("needsFiche").set(to: false))
+            _ = try ThreadRecord.filter(threadIds.contains(Column("id"))).updateAll(db, Column("needsFiche").set(to: false))
         }
     }
 
