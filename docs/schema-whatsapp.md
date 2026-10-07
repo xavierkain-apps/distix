@@ -19,6 +19,7 @@
 - **Constaté** : depuis l'app Claude (onglet Code), lister le dossier, copier les trois
   fichiers et ouvrir la copie a fonctionné **sans accès complet au disque** et sans
   boîte de dialogue.
+- **Constaté (app DistiX, 2026-10-07)** : DistiX.app lit le dossier sans accès complet au disque. Une première synchro est restée bloquée 11 min, puis toutes passent en 2 s : **hypothèse** d'une demande de consentement macOS (« accéder aux données d'autres apps ») à laquelle il fallait répondre ; l'accueil le signale.
 - **À tester** : le même script lancé depuis Terminal.app. C'est ce test qui dira ce
   que l'app DistiX devra demander (accès complet au disque, ou rien). Une app tierce
   peut aussi déclencher la demande « … souhaite accéder aux données d'autres apps »

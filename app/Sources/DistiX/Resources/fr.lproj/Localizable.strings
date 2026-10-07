@@ -144,6 +144,7 @@
 "Ses messages, fils et fiches peuvent être supprimés de ce Mac." = "Ses messages, fils et fiches peuvent être supprimés de ce Mac.";
 "Seuls les groupes cochés sont lus. Ces conversations contiennent les messages d'autres personnes : l'usage de DistiX doit rester personnel." = "Seuls les groupes cochés sont lus. Ces conversations contiennent les messages d'autres personnes : l'usage de DistiX doit rester personnel.";
 "Seuls les messages qui correspondent à vos critères sont retenus, en opportunités notées sur 100. Décrivez précisément ce que vous cherchez ou proposez." = "Seuls les messages qui correspondent à vos critères sont retenus, en opportunités notées sur 100. Décrivez précisément ce que vous cherchez ou proposez.";
+"Si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser » : la vérification attend votre réponse." = "Si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser » : la vérification attend votre réponse.";
 "Si un thème porte déjà ce nom, les deux seront fusionnés." = "Si un thème porte déjà ce nom, les deux seront fusionnés.";
 "Statut" = "Statut";
 "Suggestions" = "Suggestions";

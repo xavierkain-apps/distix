@@ -41,6 +41,10 @@ struct AccessStep: View {
                 .foregroundStyle(.secondary)
             Spacer().frame(height: 6)
             Button(checking ? L("Vérification…") : L("Vérifier l'accès")) { check() }.disabled(checking)
+            if checking {
+                Label(L("Si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser » : la vérification attend votre réponse."),
+                      systemImage: "hand.raised").font(.callout).foregroundStyle(.orange)
+            }
             switch status {
             case .available?:
                 Label(L("La base WhatsApp est lisible."), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
