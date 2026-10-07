@@ -983,7 +983,34 @@ def cmd_lid(conn, args) -> str:
             continue
         with open_copy(path) as other:
             _describe_db(other, name, member_lids, out)
+            if name == "LID.sqlite" and has(other, "ZWAZACCOUNT", "ZIDENTIFIER"):
+                _lid_join_stats(other, member_lids, out)
     return "\n".join(out)
+
+
+def _lid_join_stats(conn, member_lids: set[str], out: list[str]):
+    """Parmi les membres @lid des groupes : combien ont un numéro, selon l'état de partage."""
+    cols = colset(conn, "ZWAZACCOUNT")
+    state = "ZCURRENTPHONENUMBERSHARINGSTATE" if "ZCURRENTPHONENUMBERSHARINGSTATE" in cols else "NULL"
+    rows = conn.execute(f"SELECT ZIDENTIFIER, ZPHONENUMBER IS NOT NULL AND ZPHONENUMBER != '', {state}, "
+                        f"ZDISPLAYNAME IS NOT NULL AND ZDISPLAYNAME != '' FROM ZWAZACCOUNT").fetchall()
+    users = {x.split("@")[0]: x for x in member_lids}
+    full = Counter(); by_state = Counter(); named = 0; matched = 0
+    for ident, has_phone, st, has_name in rows:
+        ident = str(ident)
+        key = ident if ident in member_lids else (users.get(ident) and ident)
+        if not key:
+            continue
+        matched += 1
+        full["identifiant complet" if ident in member_lids else "partie utilisateur"] += 1
+        by_state[(st, bool(has_phone))] += 1
+        named += bool(has_name)
+    out.append("### Jointure membres @lid -> ZWAZACCOUNT\n")
+    out.append(f"- membres retrouvés : {matched} / {len(member_lids)} ({', '.join(f'{k} : {v}' for k, v in full.items())})")
+    out.append(f"- avec un nom (ZDISPLAYNAME) : {named}")
+    out.append("- par ZCURRENTPHONENUMBERSHARINGSTATE (valeur, numéro présent) : "
+               + ", ".join(f"({a}, {'oui' if b else 'non'}) = {n}" for (a, b), n in sorted(by_state.items(), key=str)))
+    out.append("")
 
 
 def main(argv=None) -> int:
