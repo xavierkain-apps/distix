@@ -23,6 +23,10 @@ struct MainView: View {
         .searchable(text: $model.searchText, placement: .toolbar, prompt: Text(L("Rechercher dans toutes les fiches")))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                Button { model.showGroups = true } label: { Label(L("Groupes"), systemImage: "person.3") }
+                    .help(L("Ajouter ou retirer des groupes"))
+            }
+            ToolbarItem(placement: .primaryAction) {
                 if model.isSyncing {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -33,6 +37,9 @@ struct MainView: View {
                         .help(L("Synchroniser maintenant"))
                 }
             }
+        }
+        .sheet(isPresented: $model.showGroups) {
+            GroupsSheet().environment(model)
         }
         .sheet(isPresented: $model.showOnboarding) {
             OnboardingView().environment(model).interactiveDismissDisabled()
@@ -54,7 +61,7 @@ struct SidebarView: View {
             Label(L("Nouveautés"), systemImage: "sparkles")
                 .badge(model.totalUnread)
                 .tag(SidebarItem.news)
-            Section(L("Groupes")) {
+            Section {
                 ForEach(model.selectedConversations) { c in
                     DisclosureGroup {
                         ForEach(model.themes[c.id] ?? []) { t in
@@ -68,11 +75,19 @@ struct SidebarView: View {
                             .badge(model.unread[c.id] ?? 0)
                             .tag(SidebarItem.group(c.id))
                             .contextMenu {
+                                Button(L("Gérer les groupes…")) { model.showGroups = true }
                                 Button(L("Exporter ce groupe…")) { model.exportFolder(conversationId: c.id) }
                                 Button(L("Tout marquer comme lu")) { try? model.store.markAllRead(conversationId: c.id) }
                             }
                     }
                 }
+                Button { model.showGroups = true } label: {
+                    Label(model.selectedConversations.isEmpty ? L("Choisir des groupes…") : L("Ajouter ou retirer des groupes…"),
+                          systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderless)
+            } header: {
+                Text(L("Groupes"))
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -193,5 +208,36 @@ struct StatusBadge: View {
         case .debattue: return .orange
         case .sans_reponse: return .gray
         }
+    }
+}
+
+/// Ajout et retrait de groupes après l'accueil.
+struct GroupsSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var depth: HistoryDepth = .three
+    @State private var initial: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L("Groupes suivis")).font(.title2.bold())
+            Text(L("Cochez les groupes à transformer en fiches. La profondeur d'historique s'applique aux groupes que vous cochez maintenant ; l'élargir pour un groupe déjà suivi récupère les messages plus anciens."))
+                .font(.callout).foregroundStyle(.secondary)
+            GroupPicker(depth: $depth, confirmUnselect: true)
+            HStack {
+                Button(L("Actualiser la liste")) { Task { _ = await model.refreshGroups() } }
+                Spacer()
+                Button(L("Fermer")) { dismiss() }
+                Button(L("Fermer et synchroniser")) {
+                    dismiss()
+                    model.syncNow()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(model.selectedConversations.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 640, height: 560)
+        .task { _ = await model.refreshGroups() }
     }
 }

@@ -12,6 +12,7 @@ let usage = """
       select "<morceau du nom>" [--since AAAA-MM-JJ]
                                       coche les groupes dont le nom contient ce texte
       unselect "<morceau du nom>"     décoche (sans supprimer les données)
+      forget "<morceau du nom>"       décoche et supprime les données locales du groupe
       sync [--provider claudeCode|anthropic|openAICompatible]
                                       synchronise les groupes cochés
       stats                           volumes et coûts, sans aucun contenu
@@ -76,6 +77,17 @@ do {
         for c in matches {
             try store.setSelected(c.id, selected: command == "select", historyStart: start)
             print("\(command == "select" ? "coché" : "décoché") : \(c.name)")
+        }
+
+    case "forget":
+        guard args.count >= 2 else { fail(usage) }
+        let needle = args[1].lowercased()
+        let matches = try store.conversations().filter { $0.name.lowercased().contains(needle) }
+        guard !matches.isEmpty else { fail("Aucun groupe ne contient « \(args[1]) ».") }
+        for c in matches {
+            try store.setSelected(c.id, selected: false, historyStart: nil)
+            try store.deleteData(of: c.id)
+            print("données supprimées : \(c.name)")
         }
 
     case "sync":

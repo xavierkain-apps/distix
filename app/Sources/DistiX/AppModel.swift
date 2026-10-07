@@ -43,6 +43,7 @@ final class AppModel {
     var lastRun: SyncRunRecord?
     var alert: String?
     var showOnboarding = false
+    var showGroups = false
     /// Fiches lues pendant cette visite des Nouveautés : restent visibles jusqu'au changement de vue.
     @ObservationIgnored private var sessionRead: Set<String> = []
     @ObservationIgnored private var timer: Timer?

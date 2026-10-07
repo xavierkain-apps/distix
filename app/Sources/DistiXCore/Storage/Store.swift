@@ -65,7 +65,18 @@ public final class Store: @unchecked Sendable {
         try writer.write { db in
             guard var c = try ConversationRecord.fetchOne(db, key: id) else { return }
             c.selected = selected
-            if selected { c.historyStart = historyStart }
+            if selected {
+                // Historique élargi : on relit la source depuis le début (les messages déjà
+                // présents sont ignorés à l'insertion), sinon le curseur empêcherait de
+                // récupérer les messages plus anciens.
+                let before = c.historyStart ?? .distantPast
+                let after = historyStart ?? .distantPast
+                if c.cursorSequence != nil && after < before {
+                    c.cursorSequence = nil
+                    c.cursorDate = nil
+                }
+                c.historyStart = historyStart
+            }
             try c.update(db)
         }
         notify()

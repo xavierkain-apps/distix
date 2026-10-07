@@ -1,6 +1,7 @@
 #!/bin/bash
 # Construit DistiX.app (universelle arm64 + x86_64) dans build/, signée ad hoc par
 # défaut, ou avec l'identité donnée dans SIGN_IDENTITY (« Developer ID Application: … »).
+# DISTIX_OUT choisit le dossier de sortie (par défaut build/), pour ne pas remplacer une app ouverte.
 # Hardened Runtime activé, app non sandboxée (brief § 8).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,7 +12,9 @@ if [[ "${DISTIX_ARCH:-universal}" == "native" ]]; then ARCHS=(); fi
 swift build -c release ${ARCHS[@]+"${ARCHS[@]}"}
 BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
-APP="$ROOT/build/DistiX.app"
+OUT="${DISTIX_OUT:-$ROOT/build}"
+mkdir -p "$OUT"
+APP="$OUT/DistiX.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/DistiX" "$APP/Contents/MacOS/DistiX"
@@ -57,7 +60,7 @@ codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP/Con
 codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP"
 codesign --verify --strict --verbose=2 "$APP"
 
-cd "$ROOT/build"
+cd "$OUT"
 rm -f DistiX.zip
 ditto -c -k --keepParent DistiX.app DistiX.zip
 echo "OK : $APP (build $BUILD_NUMBER)"

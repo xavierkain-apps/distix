@@ -179,6 +179,25 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(unread.first?.changeNote, "Nouvelle réponse.")
     }
 
+    func testWideningHistoryBackfills() async throws {
+        let store = Store(try AppDatabase.inMemory())
+        let llm = StubLLM(); llm.sameSubject = false
+        let engine = makeEngine(llm, store: store)
+        _ = try await engine.refreshConversations()
+        let id = ConversationRecord.makeId(source: "whatsapp", sourceId: FakeWhatsApp.group)
+        // Seuls les messages des 100 dernières minutes environ (pk >= 31).
+        try store.setSelected(id, selected: true, historyStart: FakeWhatsApp.t0.addingTimeInterval(305 * 60))
+        let first = await engine.run(settings: settings)!
+        XCTAssertEqual(first.messagesRead, 10)
+        // Profondeur élargie à tout l'historique : les 30 plus anciens sont récupérés.
+        try store.setSelected(id, selected: true, historyStart: nil)
+        let second = await engine.run(settings: settings)!
+        XCTAssertNil(second.error)
+        XCTAssertEqual(second.messagesRead, 30)
+        XCTAssertEqual(try store.statistics()["messages"], 40)
+        XCTAssertEqual(try store.statistics()["messages non attribués"], 0)
+    }
+
     func testSkippedThreadsAreCountedWithReason() async throws {
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

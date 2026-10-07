@@ -10,6 +10,8 @@
 "Actualiser la liste" = "Actualiser la liste";
 "Adresse du serveur" = "Adresse du serveur";
 "Afficher les vrais noms dans DistiX" = "Afficher les vrais noms dans DistiX";
+"Ajouter ou retirer des groupes" = "Ajouter ou retirer des groupes";
+"Ajouter ou retirer des groupes…" = "Ajouter ou retirer des groupes…";
 "Annuler" = "Annuler";
 "Aucune fiche" = "Aucune fiche";
 "Aucune fiche sélectionnée" = "Aucune fiche sélectionnée";
@@ -19,10 +21,12 @@
 "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre." = "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre.";
 "Changer de thème" = "Changer de thème";
 "Chemin de claude (facultatif)" = "Chemin de claude (facultatif)";
+"Choisir des groupes…" = "Choisir des groupes…";
 "Choisissez une fiche dans la liste." = "Choisissez une fiche dans la liste.";
 "Choix des groupes" = "Choix des groupes";
 "Clé (si nécessaire)" = "Clé (si nécessaire)";
 "Clé API" = "Clé API";
+"Cochez les groupes à transformer en fiches. La profondeur d'historique s'applique aux groupes que vous cochez maintenant ; l'élargir pour un groupe déjà suivi récupère les messages plus anciens." = "Cochez les groupes à transformer en fiches. La profondeur d'historique s'applique aux groupes que vous cochez maintenant ; l'élargir pour un groupe déjà suivi récupère les messages plus anciens.";
 "Confidentialité" = "Confidentialité";
 "Connexion réussie" = "Connexion réussie";
 "Contexte" = "Contexte";
@@ -44,6 +48,8 @@
 "Exporter en .md…" = "Exporter en .md…";
 "Exporter ici" = "Exporter ici";
 "Exporter toute la base…" = "Exporter toute la base…";
+"Fermer" = "Fermer";
+"Fermer et synchroniser" = "Fermer et synchroniser";
 "Fiches" = "Fiches";
 "Filtrer les groupes" = "Filtrer les groupes";
 "Fournisseur" = "Fournisseur";
@@ -52,7 +58,9 @@
 "Fusionner aussi entre groupes différents" = "Fusionner aussi entre groupes différents";
 "Fusionner dans" = "Fusionner dans";
 "Groupes" = "Groupes";
+"Groupes suivis" = "Groupes suivis";
 "Général" = "Général";
+"Gérer les groupes…" = "Gérer les groupes…";
 "Historique à traiter" = "Historique à traiter";
 "IA" = "IA";
 "Intelligence artificielle" = "Intelligence artificielle";
