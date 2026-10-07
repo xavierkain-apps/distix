@@ -15,6 +15,8 @@ Commandes :
   groups            liste des groupes (noms, volumes, dates)  -> local uniquement
   messages GROUPE   30 derniers messages d'un groupe          -> local uniquement
   chat-props GROUPE colonnes non textuelles d'un groupe, pour comparer deux groupes
+  lid               structure de LID.sqlite et ContactsV2.sqlite (sans contenu) et taux de
+                    correspondance avec les membres @lid des groupes
 
 GROUPE est un morceau du nom (insensible à la casse) ou le JID complet (…@g.us).
 """
@@ -948,6 +950,42 @@ def cmd_chat_props(conn, args) -> str:
     return "\n".join(lines)
 
 
+def _describe_db(conn, title: str, member_lids: set[str], out: list[str]):
+    """Tables, colonnes, volumes ; colonnes contenant des LID connus ou des numéros."""
+    out.append(f"## {title}\n")
+    phone_re = re.compile(r"^\+?\d{8,15}$")
+    for t in tables(conn):
+        n = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+        cols = columns(conn, t)
+        out.append(f"### {t} ({n} lignes)\n")
+        out.append("| colonne | type | non nuls | valeurs @lid connues | numéros | jid @s.whatsapp.net |\n|---|---|---|---|---|---|")
+        for c, ty in cols:
+            vals = [r[0] for r in conn.execute(f'SELECT "{c}" FROM "{t}" WHERE "{c}" IS NOT NULL LIMIT 50000')]
+            strs = [v.decode("utf-8", "ignore") if isinstance(v, bytes) else str(v) for v in vals]
+            users = {x.split("@")[0] for x in member_lids}
+            lid_hits = sum(1 for v in strs if v in member_lids or v in users)
+            phones = sum(1 for v in strs if phone_re.match(v))
+            sw = sum(1 for v in strs if v.endswith("@s.whatsapp.net"))
+            out.append(f"| {c} | {ty or '?'} | {len(vals)} | {lid_hits} | {phones} | {sw} |")
+        out.append("")
+
+
+def cmd_lid(conn, args) -> str:
+    member_lids = {r[0] for r in conn.execute(
+        "SELECT DISTINCT ZMEMBERJID FROM ZWAGROUPMEMBER WHERE ZMEMBERJID LIKE '%@lid'")} \
+        if has(conn, "ZWAGROUPMEMBER", "ZMEMBERJID") else set()
+    out = [f"# Correspondance LID -> numéro\n", f"Membres @lid distincts dans les groupes : {len(member_lids)}\n"]
+    folder = args.db.parent
+    for name in ("LID.sqlite", "ContactsV2.sqlite"):
+        path = folder / name
+        if not path.exists():
+            out.append(f"## {name}\nabsent\n")
+            continue
+        with open_copy(path) as other:
+            _describe_db(other, name, member_lids, out)
+    return "\n".join(out)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--db", type=Path, default=DEFAULT_DB, help="chemin de ChatStorage.sqlite")
@@ -961,10 +999,11 @@ def main(argv=None) -> int:
     p.add_argument("--limit", type=int, default=30)
     p = sub.add_parser("chat-props")
     p.add_argument("group")
+    sub.add_parser("lid")
     args = ap.parse_args(argv)
 
     handlers = {"report": cmd_report, "schema": cmd_schema, "groups": cmd_groups,
-                "messages": cmd_messages, "chat-props": cmd_chat_props}
+                "messages": cmd_messages, "chat-props": cmd_chat_props, "lid": cmd_lid}
     before = fingerprint(args.db)
     try:
         with open_copy(args.db, keep=args.keep_copy) as conn:
