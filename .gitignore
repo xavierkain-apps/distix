@@ -20,3 +20,6 @@ __pycache__/
 xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# Réglages locaux de Claude Code
+.claude/settings.local.json

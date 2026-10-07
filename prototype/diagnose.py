@@ -274,8 +274,8 @@ def _author_resolver(conn, chat_pk: int):
 
     Constaté (rapport 2026-10-07) : dans un groupe, ZFROMJID vaut le JID du groupe ;
     l'auteur est ZGROUPMEMBER -> ZWAGROUPMEMBER.ZMEMBERJID (surtout des @lid).
-    ZCONTACTNAME est souvent une chaîne vide, et ZWAMESSAGE.ZPUSHNAME n'est pas
-    un nom en clair.
+    ZCONTACTNAME est toujours une chaîne vide ; le nom vient surtout de
+    ZWAPROFILEPUSHNAME (84 % des messages reçus).
     """
     members: dict[int, tuple[str | None, str | None, str | None]] = {}
     if has(conn, "ZWAGROUPMEMBER", "ZMEMBERJID"):
@@ -302,9 +302,8 @@ def _author_resolver(conn, chat_pk: int):
             return jid or "?", name, f"ZWAGROUPMEMBER.{col}"
         if jid and push.get(jid):
             return jid, push[jid], "ZWAPROFILEPUSHNAME"
-        decoded = decode_pushname(raw_pushname)
-        if decoded:
-            return jid or "?", decoded, "ZWAMESSAGE.ZPUSHNAME décodé"
+        # ZWAMESSAGE.ZPUSHNAME n'est pas utilisé : constaté le 2026-10-07, c'est un
+        # protobuf d'entiers (métadonnées), pas un nom. Voir docs/schema-whatsapp.md.
         return jid or "?", jid or "?", "aucun"
     return resolve
 
@@ -331,14 +330,6 @@ def pushname_layers(v) -> tuple[str, list[tuple[str, str, object]]]:
     except ValueError:
         return fmt + "+opaque", []
     return fmt + "+protobuf", list(pb_leaves(bytes(raw)))
-
-
-def decode_pushname(v) -> str | None:
-    if isinstance(v, str) and not B64_RE.match(v):
-        return v.strip() or None
-    _, leaves = pushname_layers(v)
-    names = [x for _, kind, x in leaves if kind == "str" and not JID_RE.match(x)]
-    return max(names, key=len) if names else None
 
 
 def recent_messages(conn, chat_pk: int, limit: int = 30) -> list[dict]:

@@ -77,8 +77,10 @@ class DiagnoseTest(unittest.TestCase):
         self.assertEqual(by_pk[2]["author"], "Bruno")       # ZCONTACTNAME vide -> profil
         self.assertEqual(by_pk[2]["author_source"], "ZWAPROFILEPUSHNAME")
         self.assertEqual(by_pk[3]["author"], "moi")
-        self.assertEqual(by_pk[5]["author"], "Chloé")       # ZPUSHNAME base64 décodé
-        self.assertEqual(by_pk[5]["author_jid"], "333@lid")  # jamais le JID du groupe
+        # ZPUSHNAME n'est pas un nom : sans profil, on retombe sur le JID du membre,
+        # jamais sur le JID du groupe.
+        self.assertEqual(by_pk[5]["author"], "333@lid")
+        self.assertEqual(by_pk[5]["author_source"], "aucun")
         self.assertEqual(by_pk[2]["reply_to"], "AAA1")
         self.assertIsNone(by_pk[1]["reply_to"])
         self.assertEqual(by_pk[2]["reactions"], {"👍": 2})

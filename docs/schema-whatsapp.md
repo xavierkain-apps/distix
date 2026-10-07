@@ -110,24 +110,41 @@ dans `ZTEXT` : à chercher dans `ZMETADATA` en phase 1 si besoin.
 - L'auteur est donné par `ZWAMESSAGE.ZGROUPMEMBER` → `ZWAGROUPMEMBER.Z_PK`, renseigné
   pour 99 % des messages reçus. Son `ZMEMBERJID` est surtout un **`@lid`** (identifiant
   anonyme WhatsApp), parfois un `@s.whatsapp.net` (numéro).
-- `ZWAGROUPMEMBER.ZCONTACTNAME` n'est jamais nul, mais **semble souvent vide**. Dans les
-  30 messages testés, aucun nom n'a été trouvé par cette voie.
-- `ZWAMESSAGE.ZPUSHNAME` **n'est pas un nom en clair**. C'est une chaîne de 36 caractères
-  qui ressemble à du base64, différente à chaque message. **Hypothèse** : un protobuf
-  encodé en base64, ou une valeur chiffrée.
-- `ZWAPROFILEPUSHNAME` (1 654 entrées) associe un JID au nom de profil : c'est la source
-  de nom la plus prometteuse.
+- `ZWAGROUPMEMBER.ZCONTACTNAME` est **toujours une chaîne vide** (10 944 sur 10 944).
+  `ZFIRSTNAME` est renseigné pour 1 106 membres.
+- `ZWAMESSAGE.ZPUSHNAME` **n'est pas un nom**. C'est un protobuf encodé en base64 qui
+  contient presque uniquement des entiers (champs 1, 4, 9, 18, 30, 43…) : des
+  métadonnées du message. Le champ 7, présent dans 1 % des cas seulement, contient du
+  texte de sens inconnu. Cette colonne n'est pas utilisée.
+- `ZWAPROFILEPUSHNAME` associe un JID au **nom de profil** choisi par la personne.
+  Seuls 830 des 6 781 membres distincts (12 %) y figurent. Mais ce sont les membres
+  actifs : cette table couvre **84 % des messages reçus**.
 
-Ordre de résolution retenu (à valider par le second rapport) :
-`ZWAGROUPMEMBER.ZCONTACTNAME` non vide → `ZFIRSTNAME` → `ZWAPROFILEPUSHNAME[ZMEMBERJID]`
-→ `ZPUSHNAME` décodé → JID brut.
+Résolution constatée sur les 5 groupes les plus actifs (2 000 derniers messages reçus
+chacun) :
+
+| Source du nom | Part des messages |
+|---|---|
+| `ZWAPROFILEPUSHNAME[ZMEMBERJID]` | 84 % |
+| `ZWAGROUPMEMBER.ZFIRSTNAME` | 3 % |
+| aucune (JID brut) | 13 % |
+
+Ordre retenu : `ZCONTACTNAME` non vide → `ZFIRSTNAME` → `ZWAPROFILEPUSHNAME[ZMEMBERJID]`
+→ JID. Les 13 % sans nom ne gênent pas le pipeline, qui travaille sur des alias. Pour
+afficher les vrais noms, on pourra explorer en phase 1 `ContactsV2.sqlite` et
+`LID.sqlite`. Les noms de profil sont libres : une seule lettre, des emoji, des doublons
+entre personnes sont possibles.
+
+Sur les 30 derniers messages du groupe le plus actif, tous les auteurs sont résolus.
+On y trouve 3 noms distincts, stables d'un message à l'autre.
 
 **Identifiant stable de l'auteur** : `ZMEMBERJID`. **Risque** : une même personne peut
 apparaître sous un `@lid` et sous un `@s.whatsapp.net`. `LID.sqlite` permettrait
 probablement de les rapprocher (non exploré).
 
-**Mentions** : dans `ZTEXT`, une mention s'écrit `@` suivi d'un numéro (partie
-utilisateur du LID ou du numéro de téléphone), pas d'un nom. La pseudonymisation devra
+**Mentions** : dans `ZTEXT`, une mention s'écrit `@` suivi d'un numéro de 15 chiffres
+environ (partie utilisateur du LID ou numéro de téléphone), pas d'un nom. On en compte
+651 dans les groupes. La pseudonymisation devra
 les remplacer par l'alias du membre.
 
 ## Lien « réponse à »
@@ -158,7 +175,7 @@ Exemple de structure (valeurs inventées) : `ZMETADATA = {5: "3A1B2C…", 6: "12
   réaction), `7.1.3` (emoji) et `7.1.4` (horodatage, hypothèse).
 - `7.2` : une autre structure qui contient aussi un emoji (103 cas). Son sens est inconnu.
 
-Environ 3 900 messages de groupe ont au moins une réaction. C'est un signal d'approbation
+3 955 messages de groupe ont au moins une réaction, pour 6 479 réactions au total. C'est un signal d'approbation
 utilisable pour les réponses.
 
 ## Réglage « export du chat bloqué »
