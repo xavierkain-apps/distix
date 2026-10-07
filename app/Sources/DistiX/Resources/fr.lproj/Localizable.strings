@@ -13,11 +13,13 @@
 "Ajouter ou retirer des groupes" = "Ajouter ou retirer des groupes";
 "Ajouter ou retirer des groupes…" = "Ajouter ou retirer des groupes…";
 "Annuler" = "Annuler";
+"Aucun message exploitable" = "Aucun message exploitable";
 "Aucune fiche" = "Aucune fiche";
 "Aucune fiche sélectionnée" = "Aucune fiche sélectionnée";
 "Aucune synchronisation pour l'instant." = "Aucune synchronisation pour l'instant.";
 "Avancé" = "Avancé";
 "Avec l'abonnement Claude, ce montant est l'équivalent au tarif de l'API : il n'est pas facturé en plus." = "Avec l'abonnement Claude, ce montant est l'équivalent au tarif de l'API : il n'est pas facturé en plus.";
+"Ce groupe ne contient, sur ce Mac et pour la période choisie, que des événements ou des entrées vides (appels, notifications, messages supprimés)." = "Ce groupe ne contient, sur ce Mac et pour la période choisie, que des événements ou des entrées vides (appels, notifications, messages supprimés).";
 "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre." = "Ce qui quitte le Mac : uniquement le texte des messages des groupes cochés, avec les noms remplacés par des alias et les numéros masqués, envoyé au fournisseur d'IA choisi ci-dessous. Rien d'autre.";
 "Changer de thème" = "Changer de thème";
 "Chemin de claude (facultatif)" = "Chemin de claude (facultatif)";
@@ -69,6 +71,7 @@
 "La base WhatsApp est lisible." = "La base WhatsApp est lisible.";
 "La clé est conservée dans le Trousseau macOS." = "La clé est conservée dans le Trousseau macOS.";
 "Lancer DistiX à l'ouverture de session" = "Lancer DistiX à l'ouverture de session";
+"Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées." = "Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées.";
 "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique." = "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique.";
 "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant." = "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant.";
 "Les nouvelles questions et les fiches mises à jour apparaîtront ici." = "Les nouvelles questions et les fiches mises à jour apparaîtront ici.";
@@ -135,6 +138,7 @@
 "Vérifier l'accès" = "Vérifier l'accès";
 "WhatsApp Desktop doit être installé et connecté à votre compte. Les messages ne sont disponibles que lorsque WhatsApp est ouvert de temps en temps." = "WhatsApp Desktop doit être installé et connecté à votre compte. Les messages ne sont disponibles que lorsque WhatsApp est ouvert de temps en temps.";
 "WhatsApp Desktop est introuvable. Installez-le depuis whatsapp.com ou l'App Store, connectez-vous, puis réessayez." = "WhatsApp Desktop est introuvable. Installez-le depuis whatsapp.com ou l'App Store, connectez-vous, puis réessayez.";
+"aucun message exploitable" = "aucun message exploitable";
 "introuvable" = "introuvable";
 "macOS demande votre autorisation." = "macOS demande votre autorisation.";
 "mis à jour" = "mis à jour";

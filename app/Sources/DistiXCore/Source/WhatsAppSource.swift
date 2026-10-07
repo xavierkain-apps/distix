@@ -57,6 +57,11 @@ enum WhatsAppSchema {
     /// Champ de ZWAMESSAGEINFO.ZRECEIPTINFO regroupant les réactions.
     static let reactionsField = "7"
 
+    /// Types sans contenu exploitable : événements de groupe (6), entrées vides de
+    /// type 10 (appels ou notifications ; aucun texte ni média constaté), supprimés (14).
+    /// Exclus du décompte des groupes affiché à l'utilisateur.
+    static let noContentTypes = "6, 10, 14"
+
     static func kind(of type: Int) -> (MessageKind, String?) {
         switch type {
         case 0, 7: return (.text, nil)
@@ -176,6 +181,7 @@ final class WhatsAppSnapshot: SourceSnapshot {
                        MIN(m.ZMESSAGEDATE) AS first, MAX(m.ZMESSAGEDATE) AS last
                 FROM ZWACHATSESSION s
                 LEFT JOIN ZWAMESSAGE m ON m.ZCHATSESSION = s.Z_PK
+                    AND m.ZMESSAGETYPE NOT IN (\(WhatsAppSchema.noContentTypes))
                 WHERE s.ZCONTACTJID LIKE '%' || ?
                 GROUP BY s.Z_PK
                 ORDER BY last DESC

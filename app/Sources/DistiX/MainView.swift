@@ -156,8 +156,13 @@ struct FicheListView: View {
                 } else if model.sidebar == .news {
                     ContentUnavailableView(L("Rien de nouveau"), systemImage: "checkmark.circle",
                                            description: Text(L("Les nouvelles questions et les fiches mises à jour apparaîtront ici.")))
+                } else if case .group(let id)? = model.sidebar, model.usableCount(id) == 0,
+                          model.conversations.first(where: { $0.id == id })?.lastSyncedAt != nil {
+                    ContentUnavailableView(L("Aucun message exploitable"), systemImage: "text.badge.xmark",
+                                           description: Text(L("Ce groupe ne contient, sur ce Mac et pour la période choisie, que des événements ou des entrées vides (appels, notifications, messages supprimés).")))
                 } else {
-                    ContentUnavailableView(L("Aucune fiche"), systemImage: "tray")
+                    ContentUnavailableView(L("Aucune fiche"), systemImage: "tray",
+                                           description: Text(L("Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées.")))
                 }
             }
         }

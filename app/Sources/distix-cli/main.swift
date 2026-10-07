@@ -9,8 +9,8 @@ let usage = """
 
     Commandes :
       groups                          liste les groupes WhatsApp (noms : local uniquement)
-      select "<morceau du nom>" [--since AAAA-MM-JJ]
-                                      coche les groupes dont le nom contient ce texte
+      select "<nom, JID ou morceau>" [--since AAAA-MM-JJ] [--all]
+                                      coche le groupe (--all : tous ceux qui contiennent ce texte)
       unselect "<morceau du nom>"     décoche (sans supprimer les données)
       forget "<morceau du nom>"       décoche et supprime les données locales du groupe
       sync [--provider claudeCode|anthropic|openAICompatible]
@@ -44,6 +44,19 @@ let waPath = option("--wa")
 let providerName = option("--provider")
 let since = option("--since")
 let includeSources = flag("--sources")
+let all = flag("--all")
+
+/// Groupes désignés par un nom exact, un JID ou un morceau de nom. Un morceau qui
+/// désigne plusieurs groupes est refusé, sauf avec --all.
+func matching(_ query: String, in list: [ConversationRecord]) -> [ConversationRecord] {
+    if let exact = list.first(where: { $0.sourceId == query || $0.id == query || $0.name == query }) { return [exact] }
+    let hits = list.filter { $0.name.lowercased().contains(query.lowercased()) }
+    if hits.count > 1 && !all {
+        fail("« \(query) » désigne \(hits.count) groupes ; précisez le nom exact ou ajoutez --all :\n"
+             + hits.map { "  \($0.name)  [\($0.sourceId)]" }.joined(separator: "\n"))
+    }
+    return hits
+}
 guard let command = args.first else { fail(usage) }
 
 var settings = AppSettings.load(AppSettings.sharedDefaults)
@@ -64,14 +77,13 @@ do {
     case "groups":
         for c in try await engine.refreshConversations() {
             let last = c.lastMessageAt.map { day.string(from: $0) } ?? "—"
-            print("\(c.selected ? "[x]" : "[ ]") \(String(c.messageCount).padding(toLength: 6, withPad: " ", startingAt: 0)) \(last)  \(c.name)")
+            print("\(c.selected ? "[x]" : "[ ]") \(String(c.messageCount).padding(toLength: 6, withPad: " ", startingAt: 0)) \(last)  \(c.name)  [\(c.sourceId)]")
         }
 
     case "select", "unselect":
         guard args.count >= 2 else { fail(usage) }
-        let needle = args[1].lowercased()
         _ = try await engine.refreshConversations()
-        let matches = try store.conversations().filter { $0.name.lowercased().contains(needle) }
+        let matches = matching(args[1], in: try store.conversations())
         guard !matches.isEmpty else { fail("Aucun groupe ne contient « \(args[1]) ».") }
         let start = since.flatMap { day.date(from: $0) }
         for c in matches {
@@ -81,8 +93,7 @@ do {
 
     case "forget":
         guard args.count >= 2 else { fail(usage) }
-        let needle = args[1].lowercased()
-        let matches = try store.conversations().filter { $0.name.lowercased().contains(needle) }
+        let matches = matching(args[1], in: try store.conversations())
         guard !matches.isEmpty else { fail("Aucun groupe ne contient « \(args[1]) ».") }
         for c in matches {
             try store.setSelected(c.id, selected: false, historyStart: nil)

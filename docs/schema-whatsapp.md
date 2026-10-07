@@ -92,7 +92,7 @@ retrouvera que ce que son app Desktop a synchronisé.
 | 11 | GIF | | marqueur |
 | 15 | sticker | | ignoré ou marqueur |
 | 6 | système (arrivées, départs, changements) | `ZGROUPEVENTTYPE` ≠ 2 | écarté |
-| 10 | appel de groupe | `ZGROUPEVENTTYPE` = 3 | écarté |
+| 10 | entrée sans contenu : appel de groupe ou notification (**hypothèse**) ; un groupe d'annonces en contenait 54 sur 57, sans texte ni média | `ZGROUPEVENTTYPE` = 3 le plus souvent | écarté, exclu du décompte des groupes |
 | 14 | message supprimé | `ZTEXT` presque toujours vide | écarté |
 | 12, 13, 46, 54, 59, 66, 75 | **inconnus** (moins de 150 au total ; 46 est peut-être un sondage) | pas de `ZTEXT` | marqueur générique, à préciser |
 

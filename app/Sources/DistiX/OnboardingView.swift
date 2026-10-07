@@ -116,7 +116,8 @@ struct GroupPicker: View {
                         HStack {
                             Text(c.name)
                             Spacer()
-                            Text(L("\(c.messageCount) messages")).foregroundStyle(.secondary)
+                            Text(c.messageCount == 0 ? L("aucun message exploitable") : L("\(c.messageCount) messages"))
+                                .foregroundStyle(.secondary)
                             Text(c.lastMessageAt?.formatted(date: .abbreviated, time: .omitted) ?? "—")
                                 .foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
                         }

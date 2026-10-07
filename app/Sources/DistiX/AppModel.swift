@@ -127,6 +127,8 @@ final class AppModel {
         try? store.markAllRead()
     }
 
+    func usableCount(_ id: String) -> Int { (try? store.usableMessageCount(in: id)) ?? 0 }
+
     func conversationName(_ id: String) -> String {
         conversations.first { $0.id == id }?.name ?? ""
     }

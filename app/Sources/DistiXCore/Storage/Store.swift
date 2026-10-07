@@ -82,6 +82,14 @@ public final class Store: @unchecked Sendable {
         notify()
     }
 
+    /// Messages exploitables (texte ou média) stockés pour un groupe.
+    public func usableMessageCount(in conversationId: String) throws -> Int {
+        try writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM messages WHERE conversationId = ? AND kind IN ('text', 'media')",
+                             arguments: [conversationId]) ?? 0
+        }
+    }
+
     public func setSyncInterval(_ id: String, hours: Double?) throws {
         try writer.write { db in
             try db.execute(sql: "UPDATE conversations SET syncIntervalHours = ? WHERE id = ?", arguments: [hours, id])

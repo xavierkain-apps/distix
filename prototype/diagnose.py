@@ -67,7 +67,7 @@ OPTIONAL = {
 # forensique sur WhatsApp iOS : à confirmer par le rapport, jamais à supposer.
 TYPE_GUESS = {
     0: "texte", 1: "image", 2: "vidéo", 3: "audio", 4: "contact",
-    5: "position", 6: "système", 7: "lien", 8: "document", 10: "appel",
+    5: "position", 6: "système", 7: "lien", 8: "document", 10: "appel ou notification (sans contenu)",
     11: "gif", 14: "supprimé", 15: "sticker",
 }
 
