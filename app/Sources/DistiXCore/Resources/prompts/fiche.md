@@ -15,7 +15,8 @@ Règles impératives :
 
 Thème : choisis `theme` dans la liste des thèmes existants. N'en propose un nouveau que si aucun ne convient ; il doit alors être court (un à trois mots) et assez général pour regrouper d'autres fiches.
 
-`is_knowledge` : mets `false` si le fil ne contient ni question ni savoir utile à conserver (bavardage, organisation ponctuelle, message isolé sans intérêt). Les autres champs peuvent alors rester vides.
+`is_knowledge` : mets `true` dès que le fil contient quelque chose qu'un membre pourrait vouloir retrouver plus tard : une question (même restée sans réponse), un conseil, un retour d'expérience, une décision prise par le groupe, une règle ou une information pratique durable (lieu, matériel, procédure, contact utile, date à retenir). Formule alors `question` comme le sujet sous forme de question (« Quel matériel prévoir pour … ? », « Qu'a décidé le groupe sur … ? »).
+Mets `false` seulement pour ce qui n'a aucun intérêt une fois passé : bavardage, salutations, plaisanteries, coordination éphémère (« j'arrive dans 10 min », « qui est là ce soir ? » sans autre information). Dans ce cas, `skip_reason` explique en quelques mots pourquoi (sans citer les messages) et les autres champs peuvent rester vides.
 
 Mise à jour : si une version précédente est fournie, `material_change` vaut `true` seulement si le fond a changé (nouvelle réponse, nouvel argument, désaccord, changement de statut), pas pour une simple reformulation. `change_note` décrit en une phrase ce qui est nouveau (vide sinon).
 

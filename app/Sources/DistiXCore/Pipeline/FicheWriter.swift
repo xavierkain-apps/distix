@@ -9,6 +9,7 @@ struct FicheWriter {
     struct Output: Decodable {
         struct Answer: Decodable { let summary: String; let support: String; let source_message_ids: [String] }
         let is_knowledge: Bool
+        let skip_reason: String
         let question: String
         let context: String
         let status: String
@@ -24,6 +25,7 @@ struct FicheWriter {
 
     static let schema = Schema.object([
         "is_knowledge": Schema.boolean,
+        "skip_reason": Schema.string,
         "question": Schema.string,
         "context": Schema.string,
         "status": Schema.enumeration(FicheStatus.allCases.map(\.rawValue)),
@@ -46,6 +48,7 @@ struct FicheWriter {
 
     struct Result {
         var content: FicheContent?
+        var skipReason: String?
         var materialChange: Bool
         var changeNote: String
         var threadSummary: String
@@ -86,7 +89,9 @@ struct FicheWriter {
         let (out, u) = try await provider.generate(request, as: Output.self)
         usage += u
         guard out.is_knowledge, !out.question.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return Result(content: nil, materialChange: false, changeNote: "", threadSummary: out.thread_summary)
+            let reason = out.is_knowledge ? "question vide" : (out.skip_reason.isEmpty ? "non précisé" : out.skip_reason)
+            return Result(content: nil, skipReason: reason, materialChange: false, changeNote: "",
+                          threadSummary: out.thread_summary)
         }
         // Ne rien inventer : une réponse sans message source valide est écartée.
         let answers: [FicheAnswer] = out.answers.compactMap { a in
@@ -101,7 +106,7 @@ struct FicheWriter {
                                    theme: out.theme.isEmpty ? "Divers" : out.theme, answers: answers,
                                    disagreements: out.disagreements, openPoints: out.open_points,
                                    links: Self.verifiedLinks(out.links, in: messages))
-        return Result(content: content, materialChange: out.material_change, changeNote: out.change_note,
+        return Result(content: content, skipReason: nil, materialChange: out.material_change, changeNote: out.change_note,
                       threadSummary: out.thread_summary)
     }
 }

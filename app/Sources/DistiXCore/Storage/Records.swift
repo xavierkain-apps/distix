@@ -68,6 +68,8 @@ public struct ThreadRecord: Codable, FetchableRecord, MutablePersistableRecord, 
     public var lastMessageAt: Date
     /// La fiche doit être (re)générée.
     public var needsFiche: Bool
+    /// Raison donnée par le modèle quand le fil n'a pas donné de fiche.
+    public var skipReason: String?
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }
@@ -136,6 +138,8 @@ public struct SyncRunRecord: Codable, FetchableRecord, MutablePersistableRecord,
     public var fichesCreated: Int = 0
     public var fichesUpdated: Int = 0
     public var merges: Int = 0
+    public var messagesProcessed: Int = 0
+    public var threadsSkipped: Int = 0
     public var inputTokens: Int = 0
     public var outputTokens: Int = 0
     public var costUSD: Double = 0

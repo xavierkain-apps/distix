@@ -59,7 +59,8 @@ final class StubLLM: LLMProvider, @unchecked Sendable {
         let answerKeys = lines.dropFirst().map { String($0.dropFirst().prefix { $0 != "]" }) }
         let hasPrevious = prompt.contains("VERSION PRÉCÉDENTE")
         return [
-            "is_knowledge": true, "question": question, "context": "Contexte.",
+            "is_knowledge": !question.contains("bavardage"), "skip_reason": question.contains("bavardage") ? "bavardage" : "",
+            "question": question, "context": "Contexte.",
             "status": answerKeys.isEmpty ? "sans_reponse" : "repondue", "theme": "Financement",
             "answers": answerKeys.isEmpty ? [] : [["summary": "Réponse", "support": "consensus",
                                                    "source_message_ids": answerKeys + ["m999"]]],

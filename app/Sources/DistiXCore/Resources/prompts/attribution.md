@@ -10,7 +10,9 @@ Tu reçois :
 Pour chaque message à classer, indique :
 - l'identifiant du fil existant auquel il se rattache (`T…`) ;
 - ou un nouveau fil que tu crées (`N1`, `N2`…) s'il lance un sujet qui mérite une fiche : une question, une demande de conseil, un retour d'expérience, une information utile qui appelle des réactions ;
-- ou `aucun` pour ce qui ne porte pas de savoir : remerciement isolé, salutation, bavardage, message logistique sans intérêt durable, média sans texte qui ne s'insère dans aucun fil.
+- ou `aucun` pour ce qui ne porte pas de savoir : remerciement isolé, salutation, bavardage, coordination éphémère sans intérêt une fois passée, média sans texte qui ne s'insère dans aucun fil.
+
+Ouvre aussi un fil pour une décision du groupe, une règle, une information pratique durable (matériel, lieu, procédure, date à retenir) ou un retour d'expérience, même sans question explicite.
 
 Règles :
 - Un message qui répond à (« réponse à ») un message d'un fil appartient presque toujours à ce fil.

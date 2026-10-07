@@ -134,6 +134,14 @@ public final class AppDatabase: @unchecked Sendable {
                     tokenize = 'unicode61 remove_diacritics 2')
                 """)
         }
+        m.registerMigration("v2") { db in
+            // Motif d'un fil écarté par la rédaction (pas de fiche), pour comprendre les rejets.
+            try db.alter(table: "threads") { t in t.add(column: "skipReason", .text) }
+            try db.alter(table: "sync_runs") { t in
+                t.add(column: "messagesProcessed", .integer).notNull().defaults(to: 0)
+                t.add(column: "threadsSkipped", .integer).notNull().defaults(to: 0)
+            }
+        }
         return m
     }
 }

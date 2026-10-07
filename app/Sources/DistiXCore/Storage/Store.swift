@@ -240,7 +240,7 @@ public final class Store: @unchecked Sendable {
                     else {
                         var t = ThreadRecord(id: nil, conversationId: conversationId, state: .open,
                                              summary: newThreads[key] ?? "", firstMessageAt: m.sentAt,
-                                             lastMessageAt: m.sentAt, needsFiche: true)
+                                             lastMessageAt: m.sentAt, needsFiche: true, skipReason: nil)
                         try t.insert(db)
                         created[key] = t.id!
                         threadId = t.id!
@@ -270,6 +270,29 @@ public final class Store: @unchecked Sendable {
     public func clearNeedsFiche(_ threadIds: [Int64]) throws {
         try writer.write { db in
             _ = try ThreadRecord.filter(threadIds.contains(Column("id"))).updateAll(db, Column("needsFiche").set(to: false))
+        }
+    }
+
+    public func setSkipReason(_ threadIds: [Int64], reason: String?) throws {
+        try writer.write { db in
+            _ = try ThreadRecord.filter(threadIds.contains(Column("id"))).updateAll(db, Column("skipReason").set(to: reason))
+        }
+    }
+
+    /// Fils d'une conversation avec leur nombre de messages (pour le diagnostic local).
+    public func threads(in conversationId: String?) throws -> [(thread: ThreadRecord, messages: Int, ficheId: String?)] {
+        try writer.read { db in
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT t.id, COUNT(tm.messageId) AS n, ft.ficheId AS fiche FROM threads t
+                LEFT JOIN thread_messages tm ON tm.threadId = t.id
+                LEFT JOIN fiche_threads ft ON ft.threadId = t.id
+                \(conversationId == nil ? "" : "WHERE t.conversationId = ?")
+                GROUP BY t.id ORDER BY t.firstMessageAt
+                """, arguments: conversationId.map { [$0] } ?? [])
+            return try rows.compactMap { row in
+                guard let t = try ThreadRecord.fetchOne(db, key: row["id"] as Int64) else { return nil }
+                return (t, row["n"], row["fiche"])
+            }
         }
     }
 
@@ -542,6 +565,7 @@ public final class Store: @unchecked Sendable {
                              ("messages non attribués", "SELECT COUNT(*) FROM messages WHERE attributed = 0"),
                              ("messages rattachés à un fil", "SELECT COUNT(*) FROM thread_messages"),
                              ("fils", "SELECT COUNT(*) FROM threads"),
+                             ("fils écartés (sans fiche)", "SELECT COUNT(*) FROM threads WHERE skipReason IS NOT NULL"),
                              ("fiches", "SELECT COUNT(*) FROM fiches"),
                              ("fiches répondues", "SELECT COUNT(*) FROM fiches WHERE status = 'repondue'"),
                              ("fiches débattues", "SELECT COUNT(*) FROM fiches WHERE status = 'debattue'"),

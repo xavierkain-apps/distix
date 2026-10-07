@@ -15,6 +15,7 @@ let usage = """
       sync [--provider claudeCode|anthropic|openAICompatible]
                                       synchronise les groupes cochés
       stats                           volumes et coûts, sans aucun contenu
+      threads                         fils, résumé et motif de rejet (contenu : local uniquement)
       export <dossier> [--sources]    exporte toutes les fiches en Markdown
       check                           vérifie l'accès à WhatsApp et au fournisseur d'IA
     """
@@ -84,7 +85,8 @@ do {
         }
         let elapsed = Int(Date().timeIntervalSince(started))
         print("""
-            Messages lus : \(summary.messagesRead)
+            Messages lus dans WhatsApp : \(summary.messagesRead), traités : \(summary.messagesProcessed)
+            Fils écartés (pas de fiche) : \(summary.threadsSkipped)
             Fiches créées : \(summary.fichesCreated), mises à jour : \(summary.fichesUpdated), fusions : \(summary.merges)
             Jetons : \(summary.usage.inputTokens) en entrée, \(summary.usage.outputTokens) en sortie
             Coût (ou équivalent tarif API) : \(String(format: "%.3f", summary.usage.costUSD)) $
@@ -104,7 +106,18 @@ do {
         let folder = URL(fileURLWithPath: args[1])
         let n = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
             .export(try store.fiches(.init()), to: folder, includeSources: includeSources)
-        print("\(n) fiches exportées dans \(folder.path)")
+        if n == 0 {
+            print("Aucune fiche à exporter (voir `distix-cli threads` pour les fils écartés et leur motif).")
+        } else {
+            print("\(n) fiches exportées dans \(folder.path)")
+        }
+
+    case "threads":
+        // Contenu local : résumés et motifs de rejet rédigés par le modèle.
+        for (t, n, fiche) in try store.threads(in: nil) {
+            let state = fiche != nil ? "fiche" : (t.skipReason.map { "écarté : \($0)" } ?? "en attente")
+            print("[T\(t.id!)] \(n) msg · \(state)\n    \(t.summary)")
+        }
 
     case "check":
         print("WhatsApp : \(await source.checkAvailability())")

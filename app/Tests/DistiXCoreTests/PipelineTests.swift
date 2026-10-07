@@ -179,6 +179,29 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(unread.first?.changeNote, "Nouvelle réponse.")
     }
 
+    func testSkippedThreadsAreCountedWithReason() async throws {
+        try FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        wa = try FakeWhatsApp.build(at: waURL, messages: [
+            .init(pk: 1, chat: 1, member: 1, minutes: 0, stanza: "Q1", text: "Simple bavardage ?"),
+            .init(pk: 2, chat: 1, member: 2, minutes: 1, stanza: "R1", text: "Oui.", replyTo: "Q1"),
+            .init(pk: 3, chat: 1, member: 3, minutes: 2, stanza: "Q2", text: "Quel matériel prévoir ?"),
+            .init(pk: 4, chat: 1, member: 1, minutes: 3, stanza: "R2", text: "Une voile de 9 m².", replyTo: "Q2"),
+        ])
+        let store = Store(try AppDatabase.inMemory())
+        let llm = StubLLM(); llm.sameSubject = false
+        let engine = makeEngine(llm, store: store)
+        try await select(store, engine)
+        let summary = await engine.run(settings: settings)!
+        XCTAssertNil(summary.error)
+        XCTAssertEqual(summary.messagesProcessed, 4)
+        XCTAssertEqual(summary.fichesCreated, 1)
+        XCTAssertEqual(summary.threadsSkipped, 1)
+        XCTAssertEqual(try store.statistics()["fils écartés (sans fiche)"], 1)
+        XCTAssertEqual(try store.threads(in: nil).compactMap(\.thread.skipReason), ["bavardage"])
+        XCTAssertEqual(try store.lastRun()?.threadsSkipped, 1)
+    }
+
     func testExportAndDeleteGroupData() async throws {
         let store = Store(try AppDatabase.inMemory())
         let llm = StubLLM(); llm.sameSubject = false

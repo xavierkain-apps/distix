@@ -5,6 +5,8 @@ public struct PipelineStats: Sendable, Equatable {
     public var fichesCreated = 0
     public var fichesUpdated = 0
     public var merges = 0
+    public var messagesProcessed = 0
+    public var threadsSkipped = 0
     public var usage = LLMUsage()
     public init() {}
 }
@@ -33,6 +35,7 @@ public final class Pipeline: @unchecked Sendable {
         let pseudo = try pseudonymizer(for: [conversationId])
         let attributor = ThreadAttributor(store: store, provider: provider, settings: settings)
         let total = try store.pendingCount(in: conversationId)
+        stats.messagesProcessed += total
         while true {
             try Task.checkCancellation()
             let left = try store.pendingCount(in: conversationId)
@@ -67,7 +70,7 @@ public final class Pipeline: @unchecked Sendable {
         guard !jobs.isEmpty else { return }
         var created: [FicheRecord] = []
         var finished = 0
-        try await withThrowingTaskGroup(of: (FicheRecord?, Bool, LLMUsage).self) { group in
+        try await withThrowingTaskGroup(of: (FicheRecord?, Bool, LLMUsage, Bool).self) { group in
             var pending = jobs[...]
             func enqueue(_ job: Job) {
                 group.addTask { [self] in
@@ -76,17 +79,18 @@ public final class Pipeline: @unchecked Sendable {
                     case .create(let threadId):
                         let fiche = try await createFiche(conversationId: conversationId, threadIds: [threadId],
                                                           pseudo: pseudo, usage: &usage)
-                        return (fiche, false, usage)
+                        return (fiche, false, usage, fiche == nil)
                     case .regenerate(let id):
                         let changed = try await regenerate(ficheId: id, usage: &usage)
-                        return (nil, changed, usage)
+                        return (nil, changed, usage, false)
                     }
                 }
             }
             for _ in 0..<max(1, settings.concurrency) {
                 if let job = pending.popFirst() { enqueue(job) }
             }
-            while let (fiche, changed, usage) = try await group.next() {
+            while let (fiche, changed, usage, skipped) = try await group.next() {
+                if skipped { stats.threadsSkipped += 1 }
                 stats.usage += usage
                 finished += 1
                 if let fiche { created.append(fiche); stats.fichesCreated += 1 }
@@ -115,6 +119,7 @@ public final class Pipeline: @unchecked Sendable {
             try store.updateThreadSummary(t, summary: result.threadSummary)
         }
         try store.clearNeedsFiche(threadIds)
+        try store.setSkipReason(threadIds, reason: result.skipReason)
         guard let content = result.content else { return nil }
         let messages = try store.messages(ofThreads: threadIds)
         let fiche = FicheRecord(
