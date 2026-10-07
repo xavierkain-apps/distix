@@ -78,6 +78,8 @@ struct SidebarView: View {
                                 Button(L("Gérer les groupes…")) { model.showGroups = true }
                                 Button(L("Exporter ce groupe…")) { model.exportFolder(conversationId: c.id) }
                                 Button(L("Tout marquer comme lu")) { try? model.store.markAllRead(conversationId: c.id) }
+                                Divider()
+                                Button(L("Retraiter ce groupe…")) { model.confirmReprocess = c }
                             }
                     }
                 }
@@ -99,6 +101,14 @@ struct SidebarView: View {
                 .font(.caption).foregroundStyle(.secondary).padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+        .confirmationDialog(L("Retraiter ce groupe ?"),
+                            isPresented: Binding(get: { model.confirmReprocess != nil }, set: { if !$0 { model.confirmReprocess = nil } })) {
+            Button(L("Supprimer ses fiches et tout retraiter"), role: .destructive) {
+                if let c = model.confirmReprocess { model.reprocess(c) }
+            }
+        } message: {
+            Text(L("Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique."))
         }
         .alert(L("Renommer le thème"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField(L("Nom"), text: $newName)

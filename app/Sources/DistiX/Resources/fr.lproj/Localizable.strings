@@ -68,6 +68,7 @@
 "La base WhatsApp est lisible." = "La base WhatsApp est lisible.";
 "La clé est conservée dans le Trousseau macOS." = "La clé est conservée dans le Trousseau macOS.";
 "Lancer DistiX à l'ouverture de session" = "Lancer DistiX à l'ouverture de session";
+"Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique." = "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique.";
 "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant." = "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant.";
 "Les nouvelles questions et les fiches mises à jour apparaîtront ici." = "Les nouvelles questions et les fiches mises à jour apparaîtront ici.";
 "Liens" = "Liens";
@@ -98,6 +99,8 @@
 "Renommer le thème" = "Renommer le thème";
 "Renommer…" = "Renommer…";
 "Retour" = "Retour";
+"Retraiter ce groupe ?" = "Retraiter ce groupe ?";
+"Retraiter ce groupe…" = "Retraiter ce groupe…";
 "Revoir l'accueil" = "Revoir l'accueil";
 "Rien de nouveau" = "Rien de nouveau";
 "Réglages…" = "Réglages…";
@@ -107,6 +110,7 @@
 "Seuls les groupes cochés sont lus. Ces conversations contiennent les messages d'autres personnes : l'usage de DistiX doit rester personnel." = "Seuls les groupes cochés sont lus. Ces conversations contiennent les messages d'autres personnes : l'usage de DistiX doit rester personnel.";
 "Si un thème porte déjà ce nom, les deux seront fusionnés." = "Si un thème porte déjà ce nom, les deux seront fusionnés.";
 "Statut" = "Statut";
+"Supprimer ses fiches et tout retraiter" = "Supprimer ses fiches et tout retraiter";
 "Synchronisation" = "Synchronisation";
 "Synchroniser" = "Synchroniser";
 "Synchroniser maintenant" = "Synchroniser maintenant";

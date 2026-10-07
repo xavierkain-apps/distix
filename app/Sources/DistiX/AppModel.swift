@@ -44,6 +44,7 @@ final class AppModel {
     var alert: String?
     var showOnboarding = false
     var showGroups = false
+    var confirmReprocess: ConversationRecord?
     /// Fiches lues pendant cette visite des Nouveautés : restent visibles jusqu'au changement de vue.
     @ObservationIgnored private var sessionRead: Set<String> = []
     @ObservationIgnored private var timer: Timer?
@@ -193,6 +194,12 @@ final class AppModel {
 
     func setSelected(_ c: ConversationRecord, selected: Bool, historyStart: Date?) {
         try? store.setSelected(c.id, selected: selected, historyStart: historyStart)
+    }
+
+    /// Supprime les données d'un groupe et le retraite depuis sa profondeur d'historique.
+    func reprocess(_ c: ConversationRecord) {
+        deleteData(of: c.id)
+        Task { await sync(only: [c.id]) }
     }
 
     func deleteData(of id: String) {
