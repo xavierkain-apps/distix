@@ -287,6 +287,43 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(t.decoded, f.decoded)                     // l'original est conservé
     }
 
+    func testReviewThemesObjectiveAndModel() async throws {
+        let store = Store(try AppDatabase.inMemory())
+        let llm = RecordingLLM(base: StubLLM())
+        let engine = SyncEngine(store: store, source: WhatsAppSource(databaseURL: waURL), embedder: StubEmbedder(), provider: llm)
+        try await select(store, engine)
+        let id = ConversationRecord.makeId(source: "whatsapp", sourceId: FakeWhatsApp.group)
+        try store.saveTheme(id: nil, conversationId: id, name: "Matériel", objective: "Noms exacts des voiles et réglages")
+        _ = await engine.run(settings: settings)
+        XCTAssertTrue(llm.prompts.contains { $0.contains("Matériel (objectif : Noms exacts des voiles et réglages)") })
+
+        let all = try store.fiches(.init())
+        XCTAssertEqual(all.count, 8)
+        XCTAssertTrue(all.allSatisfy { $0.model == "recording · \(settings.effectiveFicheModel())" })
+        try store.setReview(all[0].id, .validated)
+        try store.setReview(all[1].id, .discarded)
+        XCTAssertEqual(try store.fiches(.init()).count, 7)                         // écartées masquées
+        XCTAssertEqual(try store.fiches(.init(review: .validated)).map(\.id), [all[0].id])
+        XCTAssertEqual(try store.fiches(.init(review: .discarded)).map(\.id), [all[1].id])
+        XCTAssertEqual(try store.fiches(.init(review: .toReview)).count, 6)
+        XCTAssertNotNil(try store.fiche(all[1].id)?.readAt)                       // écartée = lue
+
+        try await engine.regenerate(ficheId: all[0].id, provider: .claudeCode, model: "opus", settings: settings)
+        let regenerated = try store.fiche(all[0].id)!
+        XCTAssertEqual(regenerated.model, "recording · opus")
+        XCTAssertEqual(regenerated.review, .validated)                            // le tri est conservé
+    }
+
+    func testThemeNameCleanedAndLanguageDetected() {
+        XCTAssertEqual(FicheWriter.cleanTheme("Matériel (objectif : réglages)"), "Matériel")
+        XCTAssertEqual(FicheWriter.cleanTheme(""), "Divers")
+        XCTAssertEqual(FicheLanguage.detect(["Which wing should I buy for thermals? The new one is great for beginners."]), "en")
+        let instruction = FicheLanguage.instruction("", messages: ["Which wing should I buy for thermals? I fly every weekend."])
+        XCTAssertTrue(instruction.contains("anglais"))
+        XCTAssertTrue(instruction.contains("ne traduis pas"))
+        XCTAssertTrue(FicheLanguage.instruction("es", messages: []).contains("espagnol"))
+    }
+
     func testSkippedThreadsAreCountedWithReason() async throws {
         try FileManager.default.removeItem(at: dir)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
