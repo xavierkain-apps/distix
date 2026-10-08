@@ -42,61 +42,71 @@ struct GroupGoalSheet: View {
     @State private var language: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L("Objectif du groupe")).font(.title2.bold())
-            Text(conversation.name).foregroundStyle(.secondary)
-            Picker(L("Mode"), selection: $mode) {
-                Text(L("Base de connaissances")).tag(GroupMode.knowledge)
-                Text(L("Veille")).tag(GroupMode.watch)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L("Objectif du groupe")).font(.system(size: 22, weight: .bold)).tracking(-0.4).foregroundStyle(DS.text)
+                    Text(conversation.name).font(.system(size: 13)).foregroundStyle(DS.text4).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                SegmentedPills(selection: $mode,
+                               options: [(GroupMode.knowledge, L("Base de connaissances")), (GroupMode.watch, L("Veille"))],
+                               fontSize: 12.5, horizontalPadding: 14, verticalPadding: 4)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             Text(mode == .knowledge
                  ? L("Les échanges deviennent des fiches classées par thème. Précisez, si vous le souhaitez, ce qui vous intéresse dans ce groupe.")
                  : L("Seuls les messages qui correspondent à vos critères sont retenus, en opportunités notées sur 100. Décrivez précisément ce que vous cherchez ou proposez."))
-                .font(.callout).foregroundStyle(.secondary)
-            Text(L("Suggestions")).font(.headline)
-            HStack {
-                ForEach(GoalTemplate.list(for: mode)) { t in
-                    Button(t.title) { texts[mode] = t.text }.buttonStyle(.bordered)
+                .font(.system(size: 13)).lineSpacing(2).foregroundStyle(DS.text2).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                CapsLabel(L("Suggestions"))
+                HStack(spacing: 6) {
+                    ForEach(GoalTemplate.list(for: mode)) { t in
+                        Button(t.title) { texts[mode] = t.text }
+                            .buttonStyle(ChipStyle(kind: .suggestion, selected: !t.text.isEmpty && focus == t.text))
+                    }
                 }
             }
-            TextEditor(text: focusBinding)
-                .font(.body)
-                .frame(minHeight: 140)
-                .padding(4)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+            CardEditor(text: focusBinding, minHeight: 120)
             if mode == .watch && focus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Label(L("Sans critères, la veille ne retient rien."), systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                Label(L("Sans critères, la veille ne retient rien."), systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 12.5)).foregroundStyle(DS.orange)
             }
             Text(L("Ces consignes sont envoyées à l'IA avec les messages du groupe. Remplacez les passages entre crochets."))
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(DS.text4)
             if mode == .knowledge {
-                Picker(L("Langue des fiches"), selection: $language) {
-                    Text(L("Par défaut (\(model.settings.ficheLanguage.isEmpty ? L("langue d'origine") : FicheLanguage.name(model.settings.ficheLanguage)))"))
-                        .tag(String?.none)
-                    Text(L("Langue d'origine de la conversation")).tag(String?.some(FicheLanguage.original))
-                    ForEach(FicheLanguage.choices, id: \.code) { Text($0.name.capitalized).tag(String?.some($0.code)) }
+                CardRows {
+                    FormRow(L("Langue des fiches")) {
+                        Picker(L("Langue des fiches"), selection: $language) {
+                            Text(L("Par défaut (\(model.settings.ficheLanguage.isEmpty ? L("langue d'origine") : FicheLanguage.name(model.settings.ficheLanguage)))"))
+                                .tag(String?.none)
+                            Text(L("Langue d'origine de la conversation")).tag(String?.some(FicheLanguage.original))
+                            ForEach(FicheLanguage.choices, id: \.code) { Text($0.name.capitalized).tag(String?.some($0.code)) }
+                        }
+                        .labelsHidden().fixedSize()
+                    }
                 }
-                .frame(maxWidth: 420)
             }
-            HStack {
+            HStack(spacing: 8) {
                 Spacer()
-                Button(L("Annuler"), role: .cancel) { dismiss() }
+                Button(L("Annuler")) { dismiss() }.buttonStyle(.pill).keyboardShortcut(.cancelAction)
                 Button(L("Enregistrer")) {
                     model.saveGoal(conversation, mode: mode, focus: focus, language: language, reprocess: false)
                     dismiss()
                 }
+                .buttonStyle(.pill)
                 Button(L("Enregistrer et retraiter le groupe")) {
                     model.saveGoal(conversation, mode: mode, focus: focus, language: language, reprocess: true)
                     dismiss()
                 }
+                .buttonStyle(.pillPrimary)
                 .keyboardShortcut(.defaultAction)
                 .help(L("Supprime les fiches et opportunités du groupe et le retraite avec ces consignes."))
             }
+            .padding(.top, 4)
         }
-        .padding(24)
+        .padding(EdgeInsets(top: 26, leading: 28, bottom: 22, trailing: 28))
         .frame(width: 680)
+        .dsSheet()
         .onAppear {
             mode = conversation.mode
             texts[conversation.mode] = conversation.focus ?? ""
@@ -108,35 +118,37 @@ struct GroupGoalSheet: View {
 struct OpportunityRow: View {
     @Environment(AppModel.self) private var model
     let opportunity: OpportunityRecord
+    var selected = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                ScoreBadge(score: opportunity.score)
-                Text(opportunity.summary).font(opportunity.isUnread ? .body.bold() : .body).lineLimit(3)
+        HStack(alignment: .top, spacing: 12) {
+            ScoreBadge(score: opportunity.score)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(opportunity.summary).font(.system(size: 13.5, weight: .semibold)).lineSpacing(1.5).lineLimit(4)
+                    .foregroundStyle(DS.text).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 4) {
+                    if opportunity.isUnread { Text(L("Nouveau")).fontWeight(.semibold).foregroundStyle(DS.accent); Text("·") }
+                    Text("\(model.authorName(ofMessage: opportunity.messageId)) · \(DS.listDate(opportunity.sentAt, time: true))").lineLimit(1)
+                }
+                .font(.system(size: 11)).foregroundStyle(DS.text4)
             }
-            HStack {
-                Text(model.authorName(ofMessage: opportunity.messageId)).foregroundStyle(.secondary)
-                Spacer()
-                Text(opportunity.sentAt.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(.secondary)
-            }
-            .font(.caption)
         }
-        .padding(.vertical, 3)
+        .modifier(ListCard(selected: selected))
     }
 }
 
+/// Note d'adéquation sur 100, en carré coloré.
 struct ScoreBadge: View {
     let score: Int
     var body: some View {
+        let colors = DS.scoreColors(score)
         Text("\(score)")
-            .font(.caption.bold().monospacedDigit())
-            .padding(.horizontal, 6).padding(.vertical, 1)
-            .background(color.opacity(0.2), in: Capsule())
-            .foregroundStyle(color)
+            .font(.system(size: 15, weight: .bold)).monospacedDigit().foregroundStyle(colors.text)
+            .frame(width: 38, height: 38)
+            .background(colors.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .help(L("Adéquation à vos critères, sur 100"))
+            .accessibilityLabel(L("Adéquation \(score) sur 100"))
     }
-    private var color: Color { score >= 75 ? .green : score >= 55 ? .orange : .gray }
 }
 
 struct OpportunityDetailView: View {
@@ -144,59 +156,80 @@ struct OpportunityDetailView: View {
     let opportunity: OpportunityRecord
 
     var body: some View {
+        let colors = DS.scoreColors(opportunity.score)
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
-                    ScoreBadge(score: opportunity.score)
-                    Text(opportunity.summary).font(.title2.bold()).textSelection(.enabled)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("Pourquoi ça correspond")).font(.headline)
-                    Text(opportunity.reason).textSelection(.enabled)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    let contact = model.authorContact(ofMessage: opportunity.messageId)
-                    Text(L("Auteur")).font(.headline)
-                    HStack(spacing: 12) {
-                        Text(contact.name).textSelection(.enabled)
-                        if let phone = contact.phone {
-                            Text(phone).monospacedDigit().textSelection(.enabled)
-                            Button { model.writePrivately(to: phone) } label: {
-                                Label(L("Écrire en privé"), systemImage: "bubble.left.and.text.bubble.right")
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
+            VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 10) {
+                        Text("\(opportunity.score) / 100").font(.system(size: 13, weight: .bold)).monospacedDigit()
+                            .foregroundStyle(colors.text).padding(.horizontal, 9).padding(.vertical, 3)
+                            .background(colors.background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Text(L("Adéquation à vos critères")).font(.system(size: 12)).foregroundStyle(DS.text4)
                     }
-                    if contact.phone == nil {
-                        Text(L("Cette personne ne partage pas son numéro. Pour lui écrire : dans WhatsApp, ouvrez le groupe, touchez son nom (« \(contact.name) ») puis « Envoyer un message »."))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Text(L("Dans « \(model.conversationName(opportunity.conversationId)) », le \(opportunity.sentAt.formatted(date: .long, time: .shortened))"))
-                        .foregroundStyle(.secondary)
+                    Text(opportunity.summary).font(.system(size: 28, weight: .bold)).tracking(-0.5).lineSpacing(2)
+                        .foregroundStyle(DS.text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
-                Divider()
-                Text(L("Message et contexte")).font(.headline)
-                ForEach(Array(model.context(ofOpportunity: opportunity).enumerated()), id: \.offset) { _, m in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\(m.author) · \(m.date.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption.bold()).foregroundStyle(.secondary)
-                        Text(m.text).textSelection(.enabled)
-                            .padding(m.isTarget ? 8 : 0)
-                            .background(m.isTarget ? Color.accentColor.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 8) {
+                    CapsLabel(L("Pourquoi ça correspond"))
+                    Text(opportunity.reason).font(.system(size: 15)).lineSpacing(5).foregroundStyle(DS.text2)
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
+                contactCard
+                VStack(alignment: .leading, spacing: 14) {
+                    CapsLabel(L("Message et contexte"))
+                    ForEach(Array(model.context(ofOpportunity: opportunity).enumerated()), id: \.offset) { _, m in
+                        MessageBlock(author: m.author, date: m.date, text: m.text, highlighted: m.isTarget)
                     }
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 760, alignment: .leading)
+            .textSelection(.enabled)
+            .frame(maxWidth: 560, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(EdgeInsets(top: 64, leading: 40, bottom: 48, trailing: 40))
         }
-        .toolbar {
-            ToolbarItemGroup {
-                Button { model.copyOpportunity(opportunity) } label: { Label(L("Copier le message"), systemImage: "doc.on.doc") }
-                Button { model.openWhatsApp() } label: { Label(L("Ouvrir WhatsApp"), systemImage: "message") }
-                Button { model.markUnread(itemId: AppModel.itemId(opportunity)) } label: {
-                    Label(L("Marquer comme non lue"), systemImage: "envelope.badge")
+        .overlay(alignment: .topTrailing) {
+            FloatingActions(
+                first: (L("Copier le message"), L("Copier le résumé, l'auteur et le message"), false, { model.copyOpportunity(opportunity) }),
+                second: (L("Ouvrir WhatsApp"), L("Ouvrir WhatsApp"), false, { model.openWhatsApp() })
+            ) {
+                Button(L("Marquer comme non lue")) { model.markUnread(itemId: AppModel.itemId(opportunity)) }
+            }
+            .padding(.top, 12).padding(.trailing, 14)
+        }
+    }
+
+    private var contactCard: some View {
+        let contact = model.authorContact(ofMessage: opportunity.messageId)
+        let when = L("le \(opportunity.sentAt.formatted(Date.FormatStyle().day().month(.wide).locale(Locale(identifier: "fr_FR")))) à \(opportunity.sentAt.formatted(date: .omitted, time: .shortened))")
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 14) {
+                Text(Self.initials(contact.name)).font(.system(size: 14, weight: .bold)).foregroundStyle(DS.accent)
+                    .frame(width: 40, height: 40).background(DS.accentTintStrong, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(contact.name).font(.system(size: 14, weight: .semibold)).foregroundStyle(DS.text).textSelection(.enabled)
+                    Text([contact.phone, when].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 12)).monospacedDigit().foregroundStyle(DS.text4).textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let phone = contact.phone {
+                    Button(L("Écrire en privé")) { model.writePrivately(to: phone) }
+                        .buttonStyle(PillButtonStyle(kind: .primary, compact: false))
                 }
             }
+            if contact.phone == nil {
+                Text(L("Cette personne ne partage pas son numéro. Pour lui écrire : dans WhatsApp, ouvrez le groupe, touchez son nom (« \(contact.name) ») puis « Envoyer un message »."))
+                    .font(.system(size: 12)).lineSpacing(2).foregroundStyle(DS.text4).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(L("Dans « \(model.conversationName(opportunity.conversationId)) »"))
+                .font(.system(size: 12)).foregroundStyle(DS.text4)
         }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .background(DS.window, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// « Camille R. » donne « CR ».
+    static func initials(_ name: String) -> String {
+        let letters = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).prefix(2).compactMap(\.first)
+        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 }

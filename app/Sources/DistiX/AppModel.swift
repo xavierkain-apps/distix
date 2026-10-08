@@ -8,6 +8,8 @@ import UserNotifications
 
 enum SidebarItem: Hashable {
     case news
+    /// Toutes les fiches validées, tous groupes confondus.
+    case validated
     case group(String)
     case theme(String, Int64)
 }
@@ -32,6 +34,7 @@ final class AppModel {
     var unread: [String: Int] = [:]
     var themes: [String: [ThemeRecord]] = [:]
     var themeUnread: [Int64: Int] = [:]
+    var validatedCount = 0
     var sidebar: SidebarItem? = .news { didSet { sessionRead.removeAll(); selectedFicheId = nil; reloadFiches() } }
     var statusFilter: FicheStatus? { didSet { reloadFiches() } }
     var reviewFilter: Store.ReviewFilter = .kept { didSet { reloadFiches() } }
@@ -113,6 +116,7 @@ final class AppModel {
         }
         themes = t
         themeUnread = tu
+        validatedCount = ((try? store.fiches(.init(review: .validated))) ?? []).count
         lastRun = try? store.lastRun()
         lastMeaningfulRun = try? store.lastMeaningfulRun()
         reloadFiches()
@@ -126,6 +130,7 @@ final class AppModel {
         } else {
             switch sidebar {
             case .news, nil: q.unreadOnly = true
+            case .validated: q.review = .validated
             case .group(let id): q.conversationId = id
             case .theme(let id, let theme): q.conversationId = id; q.themeId = theme
             }
@@ -138,7 +143,7 @@ final class AppModel {
         fiches = list
         // Opportunités (mode veille) : pas de thème, pas de statut.
         var opps: [OpportunityRecord] = []
-        if q.themeId == nil && statusFilter == nil && reviewFilter == .kept {
+        if q.themeId == nil && statusFilter == nil && reviewFilter == .kept && sidebar != .validated {
             opps = (try? store.opportunities(conversationId: q.conversationId, unreadOnly: q.unreadOnly, search: q.search)) ?? []
             if q.unreadOnly {
                 let kept = sessionRead.compactMap(Self.opportunityId).compactMap { try? store.opportunity($0) }

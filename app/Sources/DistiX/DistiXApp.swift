@@ -17,8 +17,10 @@ struct DistiXApp: App {
         Window("DistiX", id: "main") {
             MainView()
                 .environment(model)
-                .frame(minWidth: 960, minHeight: 600)
+                .frame(minWidth: 980, minHeight: 600)
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1180, height: 740)
         .commands {
             CommandGroup(after: .appInfo) {
                 if updater.isAvailable {
@@ -49,11 +51,11 @@ struct DistiXApp: App {
         MenuBarExtra {
             MenuBarView().environment(model)
         } label: {
-            if model.totalUnread > 0 {
-                Label("\(model.totalUnread)", systemImage: "text.book.closed.fill").labelStyle(.titleAndIcon)
-            } else {
-                Image(systemName: "text.book.closed")
+            HStack(spacing: 4) {
+                Image(nsImage: AppIconArt.menuBarImage)
+                if model.totalUnread > 0 { Text("\(model.totalUnread)") }
             }
+            .accessibilityLabel(L("DistiX, \(model.totalUnread) fiches non lues"))
         }
     }
 }
@@ -63,22 +65,22 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        Text(model.totalUnread == 1 ? L("1 fiche non lue") : L("\(model.totalUnread) fiches non lues"))
         if let progress = model.syncProgress {
             Text(progress)
         } else if let run = model.lastRun {
-            Text(L("Dernière synchro : \(run.startedAt.formatted(date: .abbreviated, time: .shortened))"))
+            Text(model.lastSyncText(run))
             if let e = run.error { Text(L("Erreur : \(e)")) }
         }
-        Text(L("\(model.totalUnread) fiches non lues"))
         Divider()
-        Button(L("Synchroniser maintenant")) { model.syncNow() }.disabled(model.isSyncing)
+        Button(L("Synchroniser maintenant")) { model.syncNow() }.keyboardShortcut("r").disabled(model.isSyncing)
         Button(L("Ouvrir DistiX")) {
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
-        SettingsLink { Text(L("Réglages…")) }
+        SettingsLink { Text(L("Réglages…")) }.keyboardShortcut(",")
         Divider()
-        Button(L("Quitter DistiX")) { NSApp.terminate(nil) }
+        Button(L("Quitter DistiX")) { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 }
 
