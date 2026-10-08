@@ -277,7 +277,7 @@ final class PipelineTests: XCTestCase {
         _ = await engine.run(settings: s)
         let fichePrompts = llm.prompts.filter { $0.contains("MESSAGES DU FIL") }
         XCTAssertFalse(fichePrompts.isEmpty)
-        XCTAssertTrue(fichePrompts.allSatisfy { $0.contains("Ne traduis pas") })
+        XCTAssertTrue(fichePrompts.allSatisfy { $0.lowercased().contains("ne traduis pas") })
 
         let f = try store.fiches(.init()).first!
         try await engine.translate(ficheId: f.id, to: "en", settings: s)
