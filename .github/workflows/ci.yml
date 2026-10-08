@@ -1,8 +1,8 @@
 name: CI
 
+# Lancement manuel uniquement : les minutes de runner macOS sont payantes pour Xavier.
+# La compilation et les tests se font sur son Mac ; les releases par scripts/release.sh.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
