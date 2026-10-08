@@ -243,14 +243,15 @@ final class AppModel {
     }
 
     /// Texte d'état de la dernière synchro, sans jamais présenter une synchro inachevée comme terminée.
-    func lastSyncText(_ run: SyncRunRecord) -> String {
+    func lastSyncText(_ run: SyncRunRecord, prefixed: Bool = true) -> String {
         let date = run.startedAt.formatted(date: .abbreviated, time: .shortened)
         if run.finishedAt == nil {
             return isSyncing ? L("Synchro en cours depuis \(date)") : L("Synchro du \(date) interrompue")
         }
-        if run.error != nil { return L("Dernière synchro : \(date) — en échec") }
-        if run.messagesProcessed == 0 && run.inputTokens == 0 { return L("Dernière synchro : \(date) — rien de nouveau") }
-        return L("Dernière synchro : \(date)")
+        let head = prefixed ? L("Dernière synchro : \(date)") : date
+        if run.error != nil { return head + " — " + L("en échec") }
+        if run.messagesProcessed == 0 && run.inputTokens == 0 { return head + " — " + L("rien de nouveau") }
+        return head
     }
 
     func refreshClaudeLocation() {
@@ -494,20 +495,31 @@ final class AppModel {
     // MARK: Fiches
 
     func copyMarkdown(_ fiche: FicheRecord) {
-        let md = (try? MarkdownExporter(store: store, showRealNames: settings.showRealNames).markdown(for: fiche)) ?? ""
+        let md = (try? MarkdownExporter(store: store, showRealNames: settings.showRealNames).markdown(for: fiche)) ?? ""   // version affichée, sans sources
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(md, forType: .string)
+    }
+
+    /// Case « inclure les messages sources » sous les fenêtres d'export (décochée par défaut :
+    /// les messages contiennent les noms et le texte d'autres personnes).
+    private func sourcesCheckbox() -> NSButton {
+        let box = NSButton(checkboxWithTitle: L("Inclure les messages sources (noms et texte des autres membres)"),
+                           target: nil, action: nil)
+        box.state = .off
+        return box
     }
 
     func exportFiche(_ fiche: FicheRecord) {
         let panel = NSSavePanel()
         let title = fiche.decodedTranslation?.question ?? fiche.question
-        panel.nameFieldStringValue = String(title.prefix(80)).replacingOccurrences(of: "/", with: "-") + ".md"
+        panel.nameFieldStringValue = MarkdownExporter.safeName(title) + ".md"
         panel.allowedContentTypes = [.init(filenameExtension: "md")!]
+        let box = sourcesCheckbox()
+        panel.accessoryView = box
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let md = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
-                .markdown(for: fiche, includeSources: true)
+                .markdown(for: fiche, includeSources: box.state == .on)
             try md.write(to: url, atomically: true, encoding: .utf8)
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {
@@ -522,11 +534,14 @@ final class AppModel {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = L("Exporter ici")
+        let box = sourcesCheckbox()
+        panel.accessoryView = box
+        panel.isAccessoryViewDisclosed = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let list = try store.fiches(.init(conversationId: conversationId, review: onlyValidated ? .validated : .kept))
             let n = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
-                .export(list, to: url, includeSources: true)
+                .export(list, to: url, includeSources: box.state == .on)
             alert = L("\(n) fiches exportées.")
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } catch {

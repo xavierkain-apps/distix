@@ -36,7 +36,7 @@ struct GeneralSettings: View {
             }
             if let last = model.lastRun {
                 Section(L("Dernière synchro")) {
-                    Text(model.lastSyncText(last))
+                    Text(model.lastSyncText(last, prefixed: false))
                     if let e = last.error { Text(e).font(.caption).foregroundStyle(.red) }
                 }
             }

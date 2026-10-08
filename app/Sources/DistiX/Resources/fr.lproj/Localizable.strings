@@ -100,6 +100,7 @@
 "Gérer les groupes…" = "Gérer les groupes…";
 "Historique à traiter" = "Historique à traiter";
 "IA" = "IA";
+"Inclure les messages sources (noms et texte des autres membres)" = "Inclure les messages sources (noms et texte des autres membres)";
 "Installé" = "Installé";
 "Installés" = "Installés";
 "Intelligence artificielle" = "Intelligence artificielle";
@@ -249,11 +250,13 @@
 "WhatsApp Desktop est introuvable. Installez-le depuis whatsapp.com ou l'App Store, connectez-vous, puis réessayez." = "WhatsApp Desktop est introuvable. Installez-le depuis whatsapp.com ou l'App Store, connectez-vous, puis réessayez.";
 "WhatsApp Desktop ne répond pas à l'ouverture d'une conversation. Numéro copié dans le presse-papiers." = "WhatsApp Desktop ne répond pas à l'ouverture d'une conversation. Numéro copié dans le presse-papiers.";
 "aucun message exploitable" = "aucun message exploitable";
+"en échec" = "en échec";
 "introuvable" = "introuvable";
 "langue d'origine" = "langue d'origine";
 "macOS demande votre autorisation." = "macOS demande votre autorisation.";
 "mis à jour" = "mis à jour";
 "nouveau" = "nouveau";
+"rien de nouveau" = "rien de nouveau";
 "À trier" = "À trier";
 "Écarter" = "Écarter";
 "Écartées" = "Écartées";

@@ -314,6 +314,14 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(regenerated.review, .validated)                            // le tri est conservé
     }
 
+    func testSafeFileNameCutsOnWordBoundary() {
+        let long = String(repeating: "parapente ", count: 12) + "voile"
+        let name = MarkdownExporter.safeName(long, limit: 30)
+        XCTAssertEqual(name, "parapente parapente parapente…")
+        XCTAssertEqual(MarkdownExporter.safeName("a/b:c"), "a b c")
+        XCTAssertEqual(LinkCleaner.clean("https://x.fr/p?id=3&utm_source=a&hsa_cam=1&gclid=z"), "https://x.fr/p?id=3")
+    }
+
     func testThemeNameCleanedAndLanguageDetected() {
         XCTAssertEqual(FicheWriter.cleanTheme("Matériel (objectif : réglages)"), "Matériel")
         XCTAssertEqual(FicheWriter.cleanTheme(""), "Divers")

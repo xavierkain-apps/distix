@@ -33,8 +33,12 @@ public struct MarkdownExporter {
         }
     }
 
-    public func markdown(for fiche: FicheRecord, includeSources: Bool = false) throws -> String {
-        guard let c = fiche.decoded else { return "# \(fiche.question)\n" }
+    /// Markdown d'une fiche. Avec `preferTranslation`, la traduction est exportée si elle
+    /// existe (c'est ce que l'app affiche), en le signalant dans l'en-tête.
+    public func markdown(for fiche: FicheRecord, includeSources: Bool = false,
+                         preferTranslation: Bool = true) throws -> String {
+        let translated = preferTranslation ? fiche.decodedTranslation : nil
+        guard let c = translated ?? fiche.decoded else { return "# \(fiche.question)\n" }
         let theme = try store.themeName(fiche.themeId) ?? c.theme
         let group = try store.conversation(fiche.conversationId)?.name ?? ""
         func yaml(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\\\"") + "\"" }
@@ -46,7 +50,7 @@ public struct MarkdownExporter {
             statut: \(Self.statusLabel(c.status))
             premier_message: \(Self.day.string(from: fiche.firstMessageAt))
             dernier_message: \(Self.day.string(from: fiche.lastMessageAt))
-            mise_a_jour: \(Self.day.string(from: fiche.updatedAt))
+            mise_a_jour: \(Self.day.string(from: fiche.updatedAt))\(translated != nil ? "\ntraduction: " + (fiche.translationLanguage ?? "") : "")
             ---
 
             # \(c.question)
@@ -98,7 +102,7 @@ public struct MarkdownExporter {
             let theme = Self.safeName(try store.themeName(f.themeId) ?? "Divers")
             let dir = folder.appendingPathComponent(group).appendingPathComponent(theme)
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            var name = Self.safeName(f.question)
+            var name = Self.safeName(f.decodedTranslation?.question ?? f.question)
             if fm.fileExists(atPath: dir.appendingPathComponent("\(name).md").path) { name += " (\(f.id.prefix(6)))" }
             try markdown(for: f, includeSources: includeSources)
                 .write(to: dir.appendingPathComponent("\(name).md"), atomically: true, encoding: .utf8)
@@ -107,9 +111,14 @@ public struct MarkdownExporter {
         return count
     }
 
-    static func safeName(_ s: String) -> String {
+    /// Nom de fichier sûr, coupé sur une fin de mot.
+    public static func safeName(_ s: String, limit: Int = 80) -> String {
         let cleaned = s.components(separatedBy: CharacterSet(charactersIn: "/\\:?*\"<>|\n\r\t")).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return String((cleaned.isEmpty ? "Sans titre" : cleaned).prefix(90))
+        guard !cleaned.isEmpty else { return "Sans titre" }
+        guard cleaned.count > limit else { return cleaned }
+        let cut = String(cleaned.prefix(limit))
+        let atWord = cut.range(of: " ", options: .backwards).map { String(cut[..<$0.lowerBound]) } ?? cut
+        return atWord.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces)) + "…"
     }
 }
