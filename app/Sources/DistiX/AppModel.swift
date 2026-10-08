@@ -67,6 +67,7 @@ final class AppModel {
         } catch {
             fatalError("Base locale illisible : \(error)")
         }
+        WhatsAppSource.purgeStaleCopies()
         engine = SyncEngine(store: store, source: source)
         settings = AppSettings.load()
         showOnboarding = !settings.onboardingDone

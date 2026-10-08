@@ -3,7 +3,14 @@ import SwiftUI
 
 @main
 struct DistiXApp: App {
-    @State private var model = AppModel()
+    @State private var model: AppModel
+
+    init() {
+        // Utilisé par scripts/build-app.sh : si on arrive ici, dyld a chargé Sparkle. On sort
+        // avant de créer le modèle, qui ouvrirait la base et lancerait une synchro.
+        if CommandLine.arguments.contains("--distix-dyld-check") { exit(0) }
+        _model = State(initialValue: AppModel())
+    }
     private let updater = Updater.shared
 
     var body: some Scene {

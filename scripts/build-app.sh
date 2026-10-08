@@ -11,6 +11,10 @@
 # sans quoi Apple refuse la notarisation (voir QuiX, Support/sign-sparkle.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Dossier de sortie résolu depuis le dossier d'appel, avant tout cd.
+OUT="${DISTIX_OUT:-$ROOT/build}"
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
 cd "$ROOT/app"
 
 ARCHS=(--arch arm64 --arch x86_64)
@@ -18,8 +22,6 @@ if [[ "${DISTIX_ARCH:-universal}" == "native" ]]; then ARCHS=(); fi
 swift build -c release ${ARCHS[@]+"${ARCHS[@]}"}
 BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)"
 
-OUT="${DISTIX_OUT:-$ROOT/build}"
-mkdir -p "$OUT"
 APP="$OUT/DistiX.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -31,7 +33,9 @@ for b in "$BIN"/*.bundle; do cp -R "$b" "$APP/Contents/Resources/"; done
 SPARKLE="$(find "$BIN" "$ROOT/app/.build" -name Sparkle.framework -type d -prune 2>/dev/null | head -1)"
 if [[ -z "$SPARKLE" ]]; then echo "Sparkle.framework introuvable" >&2; exit 1; fi
 ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/DistiX" 2>/dev/null || true
+if ! otool -l "$APP/Contents/MacOS/DistiX" | grep -A2 LC_RPATH | grep -q "@executable_path/../Frameworks"; then
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/DistiX"
+fi
 
 # Icône : générée à partir de app/AppIcon.png.
 if [[ -f "$ROOT/app/AppIcon.png" ]]; then
@@ -75,9 +79,20 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 IDENTITY="${SIGN_IDENTITY:--}"
-TS="--timestamp=none"
-[[ "$IDENTITY" != "-" ]] && TS="--timestamp"
-sign() { [[ -e "$1" ]] && codesign --force --options runtime $TS --preserve-metadata=entitlements --sign "$IDENTITY" "$1"; return 0; }
+# Developer ID : Hardened Runtime et horodatage (exigés pour la notarisation).
+# Ad hoc (constructions locales) : sans Hardened Runtime. Avec lui, la validation des
+# bibliothèques refuse Sparkle.framework (« different Team IDs ») et l'app plante au
+# lancement : une signature ad hoc n'a pas d'identifiant d'équipe.
+if [[ "$IDENTITY" == "-" ]]; then
+  FLAGS=(--timestamp=none)
+else
+  FLAGS=(--options runtime --timestamp)
+fi
+sign() {
+  if [[ -e "$1" ]]; then
+    codesign --force "${FLAGS[@]}" --preserve-metadata=entitlements --sign "$IDENTITY" "$1"
+  fi
+}
 # Du plus profond vers le plus extérieur.
 V="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current"
 sign "$V/XPCServices/Downloader.xpc"
@@ -85,9 +100,19 @@ sign "$V/XPCServices/Installer.xpc"
 sign "$V/Autoupdate"
 sign "$V/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
-codesign --force --options runtime $TS --sign "$IDENTITY" "$APP/Contents/MacOS/distix-cli"
-codesign --force --options runtime $TS --sign "$IDENTITY" "$APP"
+codesign --force "${FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/MacOS/distix-cli"
+codesign --force "${FLAGS[@]}" --sign "$IDENTITY" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
+# La vérification de signature ne prouve pas que l'app se lance : on vérifie que dyld
+# charge Sparkle (le binaire s'arrête sur une option inconnue sans ouvrir de fenêtre).
+if ! DYLD_PRINT_LIBRARIES=0 "$APP/Contents/MacOS/DistiX" --distix-dyld-check >/dev/null 2>"$OUT/dyld-check.log"; then
+  if grep -q "Library not loaded\|not valid for use in process" "$OUT/dyld-check.log"; then
+    cat "$OUT/dyld-check.log" >&2
+    echo "ÉCHEC : l'app ne pourrait pas se lancer (chargement de Sparkle refusé)." >&2
+    exit 1
+  fi
+fi
+rm -f "$OUT/dyld-check.log"
 
 cd "$OUT"
 rm -f DistiX.zip

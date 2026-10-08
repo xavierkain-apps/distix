@@ -9,12 +9,26 @@ import GRDB
 public struct WhatsAppSource: MessageSource {
     public let id = "whatsapp"
     public let databaseURL: URL
+    /// Dossier des copies temporaires (le dossier temporaire du système par défaut).
+    public let tempRoot: URL
 
     public static let defaultDatabaseURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite")
 
-    public init(databaseURL: URL = WhatsAppSource.defaultDatabaseURL) {
+    public init(databaseURL: URL = WhatsAppSource.defaultDatabaseURL,
+                tempRoot: URL = FileManager.default.temporaryDirectory) {
         self.databaseURL = databaseURL
+        self.tempRoot = tempRoot
+    }
+
+    /// Supprime les copies laissées par une synchronisation interrompue (app quittée ou
+    /// arrêtée pendant la copie) : aucune copie de la base ne doit traîner (brief § 4.3).
+    public static func purgeStaleCopies(in root: URL = FileManager.default.temporaryDirectory) {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: root.path)) ?? []
+        where name.hasPrefix("distix-") && UUID(uuidString: String(name.dropFirst(7))) != nil {   // distix-<UUID> seulement
+            try? fm.removeItem(at: root.appendingPathComponent(name))
+        }
     }
 
     public func checkAvailability() async -> SourceStatus {
@@ -34,7 +48,8 @@ public struct WhatsAppSource: MessageSource {
     }
 
     public func snapshot() async throws -> SourceSnapshot {
-        try WhatsAppSnapshot(original: databaseURL)
+        Self.purgeStaleCopies(in: tempRoot)   // une seule synchro à la fois : tout reste est périmé
+        return try WhatsAppSnapshot(original: databaseURL, tempRoot: tempRoot)
     }
 }
 
@@ -99,11 +114,11 @@ final class WhatsAppSnapshot: SourceSnapshot {
     private var messageInfoByPK = false
     private var identities = WhatsAppIdentities()
 
-    init(original: URL, attempts: Int = 3) throws {
+    init(original: URL, tempRoot: URL, attempts: Int = 3) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: original.path) else { throw SourceError.notInstalled }
         var lastError = ""
-        directory = fm.temporaryDirectory.appendingPathComponent("distix-\(UUID().uuidString)")
+        directory = tempRoot.appendingPathComponent("distix-\(UUID().uuidString)")
         for _ in 0..<attempts {
             try? fm.removeItem(at: directory)
             try fm.createDirectory(at: directory, withIntermediateDirectories: true)

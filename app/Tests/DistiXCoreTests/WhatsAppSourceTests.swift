@@ -7,10 +7,12 @@ final class WhatsAppSourceTests: XCTestCase {
     var dir: URL!
     var dbURL: URL!
     var writer: DatabaseQueue!
+    var tempRoot: URL { dir.appendingPathComponent("tmp") }
 
     override func setUpWithError() throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("distix-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
         dbURL = dir.appendingPathComponent("ChatStorage.sqlite")
         writer = try FakeWhatsApp.build(at: dbURL)
     }
@@ -33,25 +35,32 @@ final class WhatsAppSourceTests: XCTestCase {
     func testOriginalFilesUntouchedAndCopyRemoved() async throws {
         let before = try digest()
         XCTAssertNotNil(before["-wal"])
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         _ = try snap.listConversations()
         _ = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
         snap.close()
         XCTAssertEqual(before, try digest())
-        let leftovers = try FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path)
-            .filter { $0.hasPrefix("distix-") && !$0.hasPrefix("distix-test") && !$0.hasPrefix("distix-claude") }
-        XCTAssertEqual(leftovers, [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempRoot.path), [])
+    }
+
+    func testStaleCopiesArePurged() async throws {
+        let stale = tempRoot.appendingPathComponent("distix-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+        try Data("copie oubliée".utf8).write(to: stale.appendingPathComponent("ChatStorage.sqlite"))
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        snap.close()
     }
 
     func testListsOnlyGroups() async throws {
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         defer { snap.close() }
         let names = try snap.listConversations().map(\.name)
         XCTAssertEqual(Set(names), ["Investisseurs Immo", "Club Lecture"])
     }
 
     func testMessagesOfOneGroupOnly() async throws {
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         defer { snap.close() }
         let msgs = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
         XCTAssertEqual(msgs.map(\.sourceId), ["AAA1", "AAA2", "AAA3", "AAA4", "AAA5"])
@@ -59,7 +68,7 @@ final class WhatsAppSourceTests: XCTestCase {
     }
 
     func testAuthorsKindsRepliesReactionsDates() async throws {
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         defer { snap.close() }
         let m = Dictionary(uniqueKeysWithValues: try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
             .map { ($0.sourceId, $0) })
@@ -83,7 +92,7 @@ final class WhatsAppSourceTests: XCTestCase {
         try await writer.write { db in
             try db.execute(sql: "INSERT INTO ZWAGROUPMEMBER VALUES (4, 1, '444444444@lid', '', NULL)")
         }
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         defer { snap.close() }
         let a = Dictionary(uniqueKeysWithValues: try snap.listAuthors(in: FakeWhatsApp.group).map { ($0.id, $0) })
         XCTAssertEqual(a["111111111@lid"]?.displayName, "Alice")              // nom WhatsApp avant le nom de compte
@@ -97,7 +106,7 @@ final class WhatsAppSourceTests: XCTestCase {
 
     func testMissingIdentityDatabasesDegradeGracefully() async throws {
         try "pas une base".write(to: dir.appendingPathComponent("LID.sqlite"), atomically: true, encoding: .utf8)
-        let snap = try await WhatsAppSource(databaseURL: dbURL).snapshot()
+        let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
         defer { snap.close() }
         let a = Dictionary(uniqueKeysWithValues: try snap.listAuthors(in: FakeWhatsApp.group).map { ($0.id, $0) })
         XCTAssertNil(a["333333333@lid"]?.phone)
@@ -105,7 +114,7 @@ final class WhatsAppSourceTests: XCTestCase {
     }
 
     func testCursorFollowsInsertionOrderNotDate() async throws {
-        let source = WhatsAppSource(databaseURL: dbURL)
+        let source = WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot)
         var snap = try await source.snapshot()
         let first = try snap.fetchMessages(in: FakeWhatsApp.group, after: nil, since: nil)
         snap.close()
@@ -122,7 +131,7 @@ final class WhatsAppSourceTests: XCTestCase {
 
     func testSchemaChangeIsReportedCleanly() async throws {
         try await writer.write { db in try db.execute(sql: "ALTER TABLE ZWAMESSAGE RENAME COLUMN ZTEXT TO ZBODY") }
-        let source = WhatsAppSource(databaseURL: dbURL)
+        let source = WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot)
         do {
             _ = try await source.snapshot()
             XCTFail("aurait dû échouer")
@@ -134,7 +143,7 @@ final class WhatsAppSourceTests: XCTestCase {
     }
 
     func testMissingDatabase() async {
-        let status = await WhatsAppSource(databaseURL: dir.appendingPathComponent("absent.sqlite")).checkAvailability()
+        let status = await WhatsAppSource(databaseURL: dir.appendingPathComponent("absent.sqlite"), tempRoot: tempRoot).checkAvailability()
         XCTAssertEqual(status, .notInstalled)
     }
 }
