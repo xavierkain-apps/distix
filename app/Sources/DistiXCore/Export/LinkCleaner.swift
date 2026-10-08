@@ -2,7 +2,7 @@ import Foundation
 
 /// Retire les paramètres de pistage d'un lien (utm_*, gclid…) pour l'affichage et l'export.
 public enum LinkCleaner {
-    static let trackingPrefixes = ["utm_", "gad_", "mc_", "pk_"]
+    static let trackingPrefixes = ["utm_", "gad_", "hsa_", "mc_", "pk_", "_ga", "_gl"]
     static let trackingNames: Set<String> = ["gclid", "gbraid", "wbraid", "fbclid", "msclkid", "dclid", "yclid",
                                              "igshid", "ref_src", "_hsenc", "_hsmi", "srsltid"]
 

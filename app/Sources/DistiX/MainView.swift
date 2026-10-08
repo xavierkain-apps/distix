@@ -47,8 +47,10 @@ struct MainView: View {
                 if model.isSyncing {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text(model.syncProgress ?? "").font(.caption).lineLimit(1).frame(maxWidth: 320)
+                        Text(model.syncProgress ?? "").font(.caption).lineLimit(1).truncationMode(.middle)
+                            .frame(width: 200, alignment: .leading)
                     }
+                    .help(model.syncProgress ?? "")
                 } else {
                     Button { model.syncNow() } label: { Label(L("Synchroniser"), systemImage: "arrow.clockwise") }
                         .help(L("Synchroniser maintenant"))
@@ -131,10 +133,19 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if let run = model.lastRun, !model.isSyncing {
+            if let since = model.readingSince {
+                TimelineView(.periodic(from: since, by: 1)) { ctx in
+                    if ctx.date.timeIntervalSince(since) > 5 {
+                        Label(L("En attente de WhatsApp : si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser »."),
+                              systemImage: "hand.raised.fill")
+                            .font(.caption).foregroundStyle(.orange).padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            } else if let run = model.lastRun {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L("Dernière synchro : \(run.startedAt.formatted(date: .abbreviated, time: .shortened))"))
-                    if run.error != nil { Text(L("En échec — voir Réglages")).foregroundStyle(.red) }
+                    Text(model.lastSyncText(run))
+                    if run.error != nil && run.finishedAt != nil { Text(L("En échec — voir Réglages")).foregroundStyle(.red) }
                 }
                 .font(.caption).foregroundStyle(.secondary).padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -259,7 +270,7 @@ struct FicheRow: View {
                 if fiche.review == .validated {
                     Image(systemName: "checkmark.seal.fill").foregroundStyle(.green).help(L("Validée"))
                 }
-                Text(fiche.question).font(fiche.isUnread ? .body.bold() : .body).lineLimit(3)
+                Text(fiche.decodedTranslation?.question ?? fiche.question).font(fiche.isUnread ? .body.bold() : .body).lineLimit(3)
                     .foregroundStyle(fiche.review == .discarded ? .secondary : .primary)
                     .strikethrough(fiche.review == .discarded)
             }

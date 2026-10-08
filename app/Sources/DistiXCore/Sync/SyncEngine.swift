@@ -51,7 +51,7 @@ public actor SyncEngine {
         do {
             run = try store.startRun()
             step("démarrée")
-            progress(String(localized: "Lecture de WhatsApp… (si macOS le demande, autorisez DistiX à accéder aux données d'autres apps)", bundle: CoreResources.bundle))
+            progress(String(localized: "Lecture de WhatsApp…", bundle: CoreResources.bundle))
             let snap = try await source.snapshot()
             step("copie de WhatsApp faite")
             do {

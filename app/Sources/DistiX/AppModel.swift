@@ -50,7 +50,18 @@ final class AppModel {
     var selectedFicheId: String? { didSet { openedItem() } }
     var editingGoal: ConversationRecord?
     var isSyncing = false
-    var syncProgress: String?
+    var syncProgress: String? {
+        didSet {
+            // La lecture de WhatsApp dure 2 s ; si elle traîne, c'est la demande d'autorisation de macOS.
+            if syncProgress == L("Lecture de WhatsApp…") {
+                readingSince = readingSince ?? Date()
+            } else {
+                readingSince = nil
+            }
+        }
+    }
+    /// Début de la lecture de WhatsApp en cours (nil hors lecture).
+    var readingSince: Date?
     var lastRun: SyncRunRecord?
     var alert: String?
     var showOnboarding = false
@@ -204,6 +215,15 @@ final class AppModel {
         return out
     }
 
+    /// Ce qui n'est pas proposé dans « Régénérer avec », et pourquoi.
+    var unavailableModelNotes: [String] {
+        var out: [String] = []
+        if Keychain.get(ProviderFactory.anthropicKeyAccount)?.isEmpty != false { out.append(L("API Anthropic : aucune clé (Réglages > IA)")) }
+        if !ollamaRunning { out.append(L("Modèles locaux : Ollama non lancé (Réglages > IA)")) }
+        else if localModels.isEmpty { out.append(L("Modèles locaux : aucun installé (Réglages > IA)")) }
+        return out
+    }
+
     func regenerate(_ fiche: FicheRecord, with choice: ModelChoice) {
         Task {
             isSyncing = true
@@ -216,6 +236,17 @@ final class AppModel {
             syncProgress = nil
             reload()
         }
+    }
+
+    /// Texte d'état de la dernière synchro, sans jamais présenter une synchro inachevée comme terminée.
+    func lastSyncText(_ run: SyncRunRecord) -> String {
+        let date = run.startedAt.formatted(date: .abbreviated, time: .shortened)
+        if run.finishedAt == nil {
+            return isSyncing ? L("Synchro en cours depuis \(date)") : L("Synchro du \(date) interrompue")
+        }
+        if run.error != nil { return L("Dernière synchro : \(date) — en échec") }
+        if run.messagesProcessed == 0 && run.inputTokens == 0 { return L("Dernière synchro : \(date) — rien de nouveau") }
+        return L("Dernière synchro : \(date)")
     }
 
     func refreshClaudeLocation() {

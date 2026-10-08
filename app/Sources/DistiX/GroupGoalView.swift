@@ -33,7 +33,12 @@ struct GroupGoalSheet: View {
     @Environment(\.dismiss) private var dismiss
     let conversation: ConversationRecord
     @State private var mode: GroupMode = .knowledge
-    @State private var focus = ""
+    /// Une consigne par mode : passer en veille ne réutilise pas les consignes de la base.
+    @State private var texts: [GroupMode: String] = [:]
+    private var focusBinding: Binding<String> {
+        Binding(get: { texts[mode] ?? "" }, set: { texts[mode] = $0 })
+    }
+    private var focus: String { texts[mode] ?? "" }
     @State private var language: String?
 
     var body: some View {
@@ -53,10 +58,10 @@ struct GroupGoalSheet: View {
             Text(L("Suggestions")).font(.headline)
             HStack {
                 ForEach(GoalTemplate.list(for: mode)) { t in
-                    Button(t.title) { focus = t.text }.buttonStyle(.bordered)
+                    Button(t.title) { texts[mode] = t.text }.buttonStyle(.bordered)
                 }
             }
-            TextEditor(text: $focus)
+            TextEditor(text: focusBinding)
                 .font(.body)
                 .frame(minHeight: 140)
                 .padding(4)
@@ -94,7 +99,7 @@ struct GroupGoalSheet: View {
         .frame(width: 680)
         .onAppear {
             mode = conversation.mode
-            focus = conversation.focus ?? ""
+            texts[conversation.mode] = conversation.focus ?? ""
             language = conversation.language
         }
     }

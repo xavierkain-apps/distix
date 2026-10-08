@@ -108,6 +108,8 @@ struct FicheCommands: Commands {
                 ForEach(model.modelChoices) { choice in
                     Button(choice.label) { if let fiche { model.regenerate(fiche, with: choice) } }
                 }
+                if !model.unavailableModelNotes.isEmpty { Divider() }
+                ForEach(model.unavailableModelNotes, id: \.self) { Text($0) }
             }
             .disabled(fiche == nil)
             Menu(L("Traduire en")) {

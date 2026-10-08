@@ -5,6 +5,7 @@
 "3 mois" = "3 mois";
 "6 mois" = "6 mois";
 "API Anthropic (clé)" = "API Anthropic (clé)";
+"API Anthropic : aucune clé (Réglages > IA)" = "API Anthropic : aucune clé (Réglages > IA)";
 "Accès à WhatsApp" = "Accès à WhatsApp";
 "Actions" = "Actions";
 "Actualiser la liste" = "Actualiser la liste";
@@ -18,7 +19,6 @@
 "Ajouter ou retirer des groupes…" = "Ajouter ou retirer des groupes…";
 "Annuler" = "Annuler";
 "Aucun message exploitable" = "Aucun message exploitable";
-"Aucun modèle disponible" = "Aucun modèle disponible";
 "Aucune fiche" = "Aucune fiche";
 "Aucune fiche sélectionnée" = "Aucune fiche sélectionnée";
 "Aucune opportunité pour l'instant" = "Aucune opportunité pour l'instant";
@@ -65,6 +65,7 @@
 "Défaire la fusion" = "Défaire la fusion";
 "Démarrage…" = "Démarrage…";
 "Désaccords" = "Désaccords";
+"En attente de WhatsApp : si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser »." = "En attente de WhatsApp : si macOS demande d'autoriser DistiX à accéder aux données d'autres apps, cliquez sur « Autoriser ».";
 "En échec — voir Réglages" = "En échec — voir Réglages";
 "Enregistrer" = "Enregistrer";
 "Enregistrer et retraiter le groupe" = "Enregistrer et retraiter le groupe";
@@ -114,6 +115,7 @@
 "Lancer DistiX à l'ouverture de session" = "Lancer DistiX à l'ouverture de session";
 "Langue d'origine de la conversation" = "Langue d'origine de la conversation";
 "Langue des fiches" = "Langue des fiches";
+"Lecture de WhatsApp…" = "Lecture de WhatsApp…";
 "Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées." = "Les fiches apparaissent après la synchronisation, quand des questions ou des informations utiles ont été trouvées.";
 "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique." = "Les fiches de ce groupe sont supprimées puis recréées à partir des messages, avec les réglages actuels. Utile après un changement de consignes ou de profondeur d'historique.";
 "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant." = "Les groupes cochés sont synchronisés. La profondeur d'historique s'applique aux groupes que vous cochez maintenant.";
@@ -136,6 +138,8 @@
 "Modèle pour les fiches" = "Modèle pour les fiches";
 "Modèle pour les fils" = "Modèle pour les fils";
 "Modèles locaux (Ollama)" = "Modèles locaux (Ollama)";
+"Modèles locaux : Ollama non lancé (Réglages > IA)" = "Modèles locaux : Ollama non lancé (Réglages > IA)";
+"Modèles locaux : aucun installé (Réglages > IA)" = "Modèles locaux : aucun installé (Réglages > IA)";
 "Mon abonnement Claude (via Claude Code)" = "Mon abonnement Claude (via Claude Code)";
 "Nom" = "Nom";
 "Nom du thème" = "Nom du thème";
@@ -247,7 +251,6 @@
 "macOS demande votre autorisation." = "macOS demande votre autorisation.";
 "mis à jour" = "mis à jour";
 "nouveau" = "nouveau";
-"rien de nouveau" = "rien de nouveau";
 "À trier" = "À trier";
 "Écarter" = "Écarter";
 "Écartée" = "Écartée";

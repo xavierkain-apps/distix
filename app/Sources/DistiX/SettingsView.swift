@@ -36,8 +36,8 @@ struct GeneralSettings: View {
             }
             if let last = model.lastRun {
                 Section(L("Dernière synchro")) {
-                    Text(last.startedAt.formatted(date: .abbreviated, time: .shortened)
-                         + (last.messagesProcessed == 0 && last.inputTokens == 0 && last.error == nil ? " — " + L("rien de nouveau") : ""))
+                    Text(model.lastSyncText(last))
+                    if let e = last.error { Text(e).font(.caption).foregroundStyle(.red) }
                 }
             }
             Section(L("Dernier traitement")) {

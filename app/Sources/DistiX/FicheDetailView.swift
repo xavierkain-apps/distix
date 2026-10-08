@@ -107,7 +107,8 @@ struct FicheDetailView: View {
                         ForEach(model.modelChoices) { choice in
                             Button(choice.label) { model.regenerate(fiche, with: choice) }
                         }
-                        if model.modelChoices.isEmpty { Text(L("Aucun modèle disponible")) }
+                        if !model.unavailableModelNotes.isEmpty { Divider() }
+                        ForEach(model.unavailableModelNotes, id: \.self) { Text($0) }
                     }
                     Menu(L("Traduire en")) {
                         ForEach(FicheLanguage.choices, id: \.code) { lang in

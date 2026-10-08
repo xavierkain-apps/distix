@@ -779,7 +779,7 @@ public final class Store: @unchecked Sendable {
     /// Dernière synchronisation qui a réellement traité quelque chose.
     public func lastMeaningfulRun() throws -> SyncRunRecord? {
         try writer.read { db in
-            try SyncRunRecord.filter(Column("messagesProcessed") > 0 || Column("inputTokens") > 0 || Column("error") != nil)
+            try SyncRunRecord.filter(Column("messagesProcessed") > 0 || Column("inputTokens") > 0)
                 .order(Column("startedAt").desc).fetchOne(db)
         }
     }
