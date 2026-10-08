@@ -43,18 +43,20 @@ struct MainView: View {
                 Button { model.showTour = true } label: { Label(L("Découvrir DistiX"), systemImage: "questionmark.circle") }
                     .help(L("Découvrir DistiX"))
             }
-            ToolbarItem(placement: .primaryAction) {
-                if model.isSyncing {
+            ToolbarItem(placement: .status) {
+                if let text = model.busyAction ?? (model.isSyncing ? model.syncProgress : nil) {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text(model.syncProgress ?? "").font(.caption).lineLimit(1).truncationMode(.middle)
-                            .frame(width: 200, alignment: .leading)
+                        Text(text).font(.caption).lineLimit(1).truncationMode(.middle)
+                            .frame(maxWidth: 220, alignment: .leading)
                     }
-                    .help(model.syncProgress ?? "")
-                } else {
-                    Button { model.syncNow() } label: { Label(L("Synchroniser"), systemImage: "arrow.clockwise") }
-                        .help(L("Synchroniser maintenant"))
+                    .help(text)
                 }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { model.syncNow() } label: { Label(L("Synchroniser"), systemImage: "arrow.clockwise") }
+                    .help(L("Synchroniser maintenant"))
+                    .disabled(model.isSyncing)
             }
         }
         .sheet(isPresented: $model.showTour) { FeatureTour(onFinish: { model.showTour = false }) }
@@ -171,6 +173,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func themeMenu(_ t: ThemeRecord, in conversationId: String) -> some View {
         Button(L("Modifier le thème…")) { model.edit(t) }
+        Button(L("Supprimer le thème"), role: .destructive) { model.deleteTheme(t.id!) }
         Button(L("Renommer…")) { newName = t.name; renaming = t }
         Menu(L("Fusionner dans")) {
             ForEach((model.themes[conversationId] ?? []).filter { $0.id != t.id }) { other in
@@ -356,15 +359,18 @@ struct ThemeSheet: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
             Text(L("Exemple : « Réglages et matériel de parapente : noms exacts des modèles, tailles, réglages des trims et freins, avec les chiffres donnés. »"))
                 .font(.caption).foregroundStyle(.secondary)
+            Text(L("S'applique aux prochaines fiches ; « Retraiter ce groupe » reclasse les fiches existantes."))
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
+                if let id = draft.themeId {
+                    Button(L("Supprimer le thème"), role: .destructive) { model.deleteTheme(id); dismiss() }
+                }
                 Spacer()
                 Button(L("Annuler"), role: .cancel) { dismiss() }
                 Button(L("Enregistrer")) { model.saveTheme(draft); dismiss() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            Text(L("S'applique aux prochaines fiches ; « Retraiter ce groupe » reclasse les fiches existantes."))
-                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
         .frame(width: 560)

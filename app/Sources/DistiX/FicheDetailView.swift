@@ -90,12 +90,12 @@ struct FicheDetailView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button { model.review(fiche, .validated) } label: {
-                    Label(fiche.review == .validated ? L("Validée") : L("Valider"),
+                    Label(fiche.review == .validated ? L("Ne plus valider") : L("Valider"),
                           systemImage: fiche.review == .validated ? "checkmark.seal.fill" : "checkmark.seal")
                 }
                 .help(L("Garder cette fiche dans la base de connaissances"))
                 Button { model.review(fiche, .discarded) } label: {
-                    Label(fiche.review == .discarded ? L("Écartée") : L("Écarter"),
+                    Label(fiche.review == .discarded ? L("Ne plus écarter") : L("Écarter"),
                           systemImage: fiche.review == .discarded ? "xmark.bin.fill" : "xmark.bin")
                 }
                 .help(L("Retirer cette fiche de la base (elle reste visible dans « Écartées »)"))

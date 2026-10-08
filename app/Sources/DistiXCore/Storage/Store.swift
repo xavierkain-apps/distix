@@ -717,6 +717,12 @@ public final class Store: @unchecked Sendable {
         notify()
     }
 
+    /// Supprime un thème ; ses fiches deviennent « sans thème ».
+    public func deleteTheme(_ id: Int64) throws {
+        try writer.write { db in _ = try ThemeRecord.deleteOne(db, key: id) }
+        notify()
+    }
+
     public func mergeThemes(_ source: Int64, into target: Int64) throws {
         try writer.write { db in
             try db.execute(sql: "UPDATE fiches SET themeId = ? WHERE themeId = ?", arguments: [target, source])

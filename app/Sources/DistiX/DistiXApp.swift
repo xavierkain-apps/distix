@@ -89,10 +89,10 @@ struct FicheCommands: Commands {
     var body: some Commands {
         CommandMenu(L("Fiche")) {
             let fiche = model.selectedFiche
-            Button(L("Valider")) { if let fiche { model.review(fiche, .validated) } }
+            Button(fiche?.review == .validated ? L("Ne plus valider") : L("Valider")) { if let fiche { model.review(fiche, .validated) } }
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(fiche == nil)
-            Button(L("Écarter")) { if let fiche { model.review(fiche, .discarded) } }
+            Button(fiche?.review == .discarded ? L("Ne plus écarter") : L("Écarter")) { if let fiche { model.review(fiche, .discarded) } }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(fiche == nil)
             Button(L("Marquer comme non lue")) { if let id = model.selectedFicheId { model.markUnread(itemId: id) } }

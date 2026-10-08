@@ -141,6 +141,8 @@
 "Modèles locaux : Ollama non lancé (Réglages > IA)" = "Modèles locaux : Ollama non lancé (Réglages > IA)";
 "Modèles locaux : aucun installé (Réglages > IA)" = "Modèles locaux : aucun installé (Réglages > IA)";
 "Mon abonnement Claude (via Claude Code)" = "Mon abonnement Claude (via Claude Code)";
+"Ne plus valider" = "Ne plus valider";
+"Ne plus écarter" = "Ne plus écarter";
 "Nom" = "Nom";
 "Nom du thème" = "Nom du thème";
 "Notification après une synchro (une seule par synchro)" = "Notification après une synchro (une seule par synchro)";
@@ -200,6 +202,7 @@
 "Suivant" = "Suivant";
 "Sujets précis" = "Sujets précis";
 "Supprime les fiches et opportunités du groupe et le retraite avec ces consignes." = "Supprime les fiches et opportunités du groupe et le retraite avec ces consignes.";
+"Supprimer le thème" = "Supprimer le thème";
 "Supprimer ses fiches et tout retraiter" = "Supprimer ses fiches et tout retraiter";
 "Synchronisation" = "Synchronisation";
 "Synchroniser" = "Synchroniser";
@@ -253,7 +256,6 @@
 "nouveau" = "nouveau";
 "À trier" = "À trier";
 "Écarter" = "Écarter";
-"Écartée" = "Écartée";
 "Écartées" = "Écartées";
 "Écrire en privé" = "Écrire en privé";
 "Équipe ou association" = "Équipe ou association";

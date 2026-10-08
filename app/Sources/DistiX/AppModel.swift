@@ -62,6 +62,8 @@ final class AppModel {
     }
     /// Début de la lecture de WhatsApp en cours (nil hors lecture).
     var readingSince: Date?
+    /// Action ponctuelle en cours (régénération, traduction…), indépendante de la synchro.
+    var busyAction: String?
     var lastRun: SyncRunRecord?
     var alert: String?
     var showOnboarding = false
@@ -145,6 +147,10 @@ final class AppModel {
             }
         }
         opportunities = opps
+        if let sel = selectedFicheId, !fiches.contains(where: { $0.id == sel }),
+           !opportunities.contains(where: { AppModel.itemId($0) == sel }) {
+            selectedFicheId = nil
+        }
     }
 
     static func itemId(_ o: OpportunityRecord) -> String { "o-\(o.id!)" }
@@ -226,14 +232,12 @@ final class AppModel {
 
     func regenerate(_ fiche: FicheRecord, with choice: ModelChoice) {
         Task {
-            isSyncing = true
-            syncProgress = L("Régénération avec \(choice.label)…")
+            busyAction = L("Régénération avec \(choice.label)…")
             var s = settings
             if choice.provider == .openAICompatible { s.openAIBaseURL = OllamaClient().openAIBaseURL.absoluteString }
             do { try await engine.regenerate(ficheId: fiche.id, provider: choice.provider, model: choice.model, settings: s) }
             catch { alert = error.localizedDescription }
-            isSyncing = false
-            syncProgress = nil
+            busyAction = nil
             reload()
         }
     }
@@ -308,6 +312,8 @@ final class AppModel {
                                   objective: theme.objective ?? "")
     }
 
+    func deleteTheme(_ id: Int64) { try? store.deleteTheme(id) }
+
     func saveTheme(_ draft: ThemeDraft) {
         guard !draft.name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         try? store.saveTheme(id: draft.themeId, conversationId: draft.conversationId, name: draft.name, objective: draft.objective)
@@ -323,11 +329,9 @@ final class AppModel {
 
     func translate(_ fiche: FicheRecord, to language: String) {
         Task {
-            isSyncing = true
-            syncProgress = L("Traduction de la fiche…")
+            busyAction = L("Traduction de la fiche…")
             do { try await engine.translate(ficheId: fiche.id, to: language, settings: settings) } catch { alert = error.localizedDescription }
-            isSyncing = false
-            syncProgress = nil
+            busyAction = nil
             reload()
         }
     }
@@ -478,7 +482,7 @@ final class AppModel {
 
     /// Supprime les données d'un groupe et le retraite depuis sa profondeur d'historique.
     func reprocess(_ c: ConversationRecord) {
-        deleteData(of: c.id)
+        try? store.deleteData(of: c.id)
         Task { await sync(only: [c.id]) }
     }
 
@@ -497,12 +501,18 @@ final class AppModel {
 
     func exportFiche(_ fiche: FicheRecord) {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = String(fiche.question.prefix(80)).replacingOccurrences(of: "/", with: "-") + ".md"
+        let title = fiche.decodedTranslation?.question ?? fiche.question
+        panel.nameFieldStringValue = String(title.prefix(80)).replacingOccurrences(of: "/", with: "-") + ".md"
         panel.allowedContentTypes = [.init(filenameExtension: "md")!]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let md = (try? MarkdownExporter(store: store, showRealNames: settings.showRealNames)
-            .markdown(for: fiche, includeSources: true)) ?? ""
-        try? md.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            let md = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
+                .markdown(for: fiche, includeSources: true)
+            try md.write(to: url, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            alert = L("Export impossible : \(error.localizedDescription)")
+        }
     }
 
     /// Exporte un groupe (ou toute la base si nil) dans un dossier choisi.
@@ -538,11 +548,9 @@ final class AppModel {
 
     func undoMerge(_ fiche: FicheRecord) {
         Task {
-            isSyncing = true
-            syncProgress = L("Séparation des fiches…")
+            busyAction = L("Séparation des fiches…")
             do { try await engine.undoMerge(ficheId: fiche.id, settings: settings) } catch { alert = error.localizedDescription }
-            isSyncing = false
-            syncProgress = nil
+            busyAction = nil
             reload()
         }
     }
