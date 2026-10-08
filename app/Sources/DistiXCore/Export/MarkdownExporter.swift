@@ -39,7 +39,8 @@ public struct MarkdownExporter {
                          preferTranslation: Bool = true) throws -> String {
         let translated = preferTranslation ? fiche.decodedTranslation : nil
         guard let c = translated ?? fiche.decoded else { return "# \(fiche.question)\n" }
-        let theme = try store.themeName(fiche.themeId) ?? c.theme
+        // Fiche traduite : le thème de la traduction, cohérent avec le corps du texte.
+        let theme = translated != nil ? c.theme : (try store.themeName(fiche.themeId) ?? c.theme)
         let group = try store.conversation(fiche.conversationId)?.name ?? ""
         func yaml(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\\\"") + "\"" }
         var md = """
@@ -56,7 +57,9 @@ public struct MarkdownExporter {
             # \(c.question)
 
             """
-        if !c.context.isEmpty { md += "\n**Contexte.** \(c.context)\n" }
+        if !c.context.isEmpty {
+            md += "\n## " + String(localized: "Contexte", bundle: CoreResources.bundle) + "\n\n\(c.context)\n"
+        }
         if !c.answers.isEmpty {
             md += "\n## " + String(localized: "Réponses", bundle: CoreResources.bundle) + "\n\n"
             for a in c.answers { md += "- \(a.summary) _(\(Self.supportLabel(a.support)))_\n" }

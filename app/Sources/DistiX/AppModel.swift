@@ -502,11 +502,16 @@ final class AppModel {
 
     /// Case « inclure les messages sources » sous les fenêtres d'export (décochée par défaut :
     /// les messages contiennent les noms et le texte d'autres personnes).
-    private func sourcesCheckbox() -> NSButton {
+    private func sourcesCheckbox() -> (view: NSView, box: NSButton) {
         let box = NSButton(checkboxWithTitle: L("Inclure les messages sources (noms et texte des autres membres)"),
                            target: nil, action: nil)
         box.state = .off
-        return box
+        box.sizeToFit()
+        // Marge standard autour de la case, comme les champs du panneau.
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: box.frame.width + 40, height: box.frame.height + 20))
+        box.setFrameOrigin(NSPoint(x: 20, y: 10))
+        container.addSubview(box)
+        return (container, box)
     }
 
     func exportFiche(_ fiche: FicheRecord) {
@@ -514,8 +519,8 @@ final class AppModel {
         let title = fiche.decodedTranslation?.question ?? fiche.question
         panel.nameFieldStringValue = MarkdownExporter.safeName(title) + ".md"
         panel.allowedContentTypes = [.init(filenameExtension: "md")!]
-        let box = sourcesCheckbox()
-        panel.accessoryView = box
+        let (accessory, box) = sourcesCheckbox()
+        panel.accessoryView = accessory
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let md = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
@@ -534,8 +539,8 @@ final class AppModel {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = L("Exporter ici")
-        let box = sourcesCheckbox()
-        panel.accessoryView = box
+        let (accessory, box) = sourcesCheckbox()
+        panel.accessoryView = accessory
         panel.isAccessoryViewDisclosed = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
