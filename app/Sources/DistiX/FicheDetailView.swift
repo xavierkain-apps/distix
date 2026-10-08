@@ -14,6 +14,15 @@ struct FicheDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                if fiche.translation == nil, let expected = model.languageMismatch(fiche) {
+                    HStack {
+                        Label(L("Cette fiche n'est pas en \(FicheLanguage.displayName(expected)), la langue attendue pour ce groupe (fiche rédigée avant la règle de langue)."),
+                              systemImage: "character.bubble")
+                        Button(L("Régénérer")) { model.regenerateInExpectedLanguage(fiche) }
+                    }
+                    .font(.callout).padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                }
                 if let lang = fiche.translationLanguage, fiche.translation != nil {
                     HStack {
                         Label(showOriginal ? L("Version originale") : L("Traduction en \(FicheLanguage.name(lang))"),
@@ -45,7 +54,16 @@ struct FicheDetailView: View {
                     if !c.links.isEmpty {
                         section(L("Liens")) {
                             ForEach(c.links, id: \.self) { l in
-                                if let url = URL(string: l) { Link(l, destination: url) } else { Text(l) }
+                                let clean = LinkCleaner.clean(l)
+                                if let url = URL(string: clean) {
+                                    Link(destination: url) {
+                                        Text(clean).multilineTextAlignment(.leading).lineLimit(2).truncationMode(.middle)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .help(clean)
+                                } else {
+                                    Text(clean).frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                         }
                     }
@@ -81,9 +99,8 @@ struct FicheDetailView: View {
                           systemImage: fiche.review == .discarded ? "xmark.bin.fill" : "xmark.bin")
                 }
                 .help(L("Retirer cette fiche de la base (elle reste visible dans « Écartées »)"))
-                Button { model.copyMarkdown(fiche) } label: { Label(L("Copier en Markdown"), systemImage: "doc.on.doc") }
-                    .help(L("Copier en Markdown"))
                 Menu {
+                    Button(L("Copier en Markdown")) { model.copyMarkdown(fiche) }
                     Button(L("Exporter en .md…")) { model.exportFiche(fiche) }
                     Button(L("Marquer comme non lue")) { model.markUnread(fiche.id) }
                     Menu(L("Régénérer avec")) {
@@ -132,9 +149,8 @@ struct FicheDetailView: View {
                 Text(L("Du \(fiche.firstMessageAt.formatted(date: .abbreviated, time: .omitted)) au \(fiche.lastMessageAt.formatted(date: .abbreviated, time: .omitted))"))
             }
             .font(.callout).foregroundStyle(.secondary)
-            if let m = fiche.model {
-                Text(L("Rédigée par \(m)")).font(.caption).foregroundStyle(.secondary)
-            }
+            Text(fiche.model.map { L("Rédigée par \($0)") } ?? L("Modèle non enregistré (fiche rédigée avant cette information)"))
+                .font(.caption).foregroundStyle(.secondary)
             if fiche.readState == .updated, let note = fiche.changeNote {
                 Label(note, systemImage: "arrow.triangle.2.circlepath").font(.callout)
                     .padding(8).frame(maxWidth: .infinity, alignment: .leading)

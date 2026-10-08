@@ -67,7 +67,7 @@ public struct MarkdownExporter {
         }
         if !c.links.isEmpty {
             md += "\n## " + String(localized: "Liens", bundle: CoreResources.bundle) + "\n\n"
-            for l in c.links { md += "- <\(l)>\n" }
+            for l in c.links { md += "- <\(LinkCleaner.clean(l))>\n" }
         }
         if includeSources {
             md += "\n## " + String(localized: "Messages sources", bundle: CoreResources.bundle) + "\n\n"

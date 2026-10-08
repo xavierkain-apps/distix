@@ -124,23 +124,25 @@ struct GroupPicker: View {
             TextField(L("Filtrer les groupes"), text: $filter).textFieldStyle(.roundedBorder)
             List {
                 ForEach(model.conversations.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }) { c in
-                    Toggle(isOn: Binding(get: { c.selected }, set: { on in
-                        if !on && confirmUnselect { pendingUnselect = c } else { model.setSelected(c, selected: on, historyStart: depth.start) }
-                    })) {
-                        HStack {
+                    HStack {
+                        Toggle(isOn: Binding(get: { c.selected }, set: { on in
+                            if !on && confirmUnselect { pendingUnselect = c } else { model.setSelected(c, selected: on, historyStart: depth.start) }
+                        })) {
                             Text(c.name)
-                            Spacer()
-                            Text(c.messageCount == 0 ? L("aucun message exploitable") : L("\(c.messageCount) messages"))
-                                .foregroundStyle(.secondary)
-                            Text(c.lastMessageAt?.formatted(date: .abbreviated, time: .omitted) ?? "—")
-                                .foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
-                            if c.selected && showGoal {
-                                Button { model.editingGoal = c } label: {
-                                    Image(systemName: c.mode == .watch ? "binoculars" : "target")
-                                }
-                                .buttonStyle(.borderless)
-                                .help(L("Objectif du groupe"))
+                        }
+                        .toggleStyle(.checkbox)
+                        Spacer()
+                        Text(c.messageCount == 0 ? L("aucun message exploitable") : L("\(c.messageCount) messages"))
+                            .foregroundStyle(.secondary)
+                        Text(c.lastMessageAt?.formatted(date: .abbreviated, time: .omitted) ?? "—")
+                            .foregroundStyle(.secondary).frame(width: 90, alignment: .trailing)
+                        if c.selected && showGoal {
+                            Button { model.editingGoal = c } label: {
+                                Image(systemName: c.mode == .watch ? "binoculars" : "target")
                             }
+                            .buttonStyle(.borderless)
+                            .help(L("Objectif du groupe"))
+                            .accessibilityLabel(L("Objectif du groupe \(c.name)"))
                         }
                     }
                 }
@@ -227,6 +229,7 @@ struct AIStep: View {
 /// Choix du fournisseur, clé et test de connexion (accueil et réglages).
 struct AIProviderForm: View {
     @Environment(AppModel.self) private var model
+    var includeLocalModels = false
     @State private var apiKey = ""
     @State private var testResult: String?
     @State private var testing = false
@@ -244,7 +247,7 @@ struct AIProviderForm: View {
                 Text(L("Utilise Claude Code installé sur ce Mac et votre abonnement Claude. Aucune clé à saisir."))
                     .font(.callout).foregroundStyle(.secondary)
                 TextField(L("Chemin de claude (facultatif)"), text: $model.settings.claudePath,
-                          prompt: Text(ClaudeCodeProvider.candidates().first?.path ?? L("introuvable")))
+                          prompt: Text(model.claudeLocated ?? L("introuvable")))
             case .anthropic:
                 SecureField(L("Clé API"), text: $apiKey, prompt: Text("sk-ant-…"))
                 Text(L("La clé est conservée dans le Trousseau macOS.")).font(.callout).foregroundStyle(.secondary)
@@ -261,11 +264,13 @@ struct AIProviderForm: View {
                 Button(testing ? L("Test en cours…") : L("Tester la connexion")) { test() }.disabled(testing)
                 if let testResult { Text(testResult).font(.callout) }
             }
+            if includeLocalModels { LocalModelsSection() }
         }
         .formStyle(.grouped)
         .onAppear { loadKey() }
         .onChange(of: apiKey) { if model.settings.provider != .claudeCode { Keychain.set(apiKey, for: account) } }
         .onChange(of: model.settings.provider) { loadKey(); testResult = nil }
+        .onChange(of: model.settings.claudePath) { model.refreshClaudeLocation() }
     }
 
     private var account: String {

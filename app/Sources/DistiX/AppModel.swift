@@ -32,9 +32,12 @@ final class AppModel {
     var unread: [String: Int] = [:]
     var themes: [String: [ThemeRecord]] = [:]
     var themeUnread: [Int64: Int] = [:]
-    var sidebar: SidebarItem? = .news { didSet { sessionRead.removeAll(); reloadFiches() } }
+    var sidebar: SidebarItem? = .news { didSet { sessionRead.removeAll(); selectedFicheId = nil; reloadFiches() } }
     var statusFilter: FicheStatus? { didSet { reloadFiches() } }
     var reviewFilter: Store.ReviewFilter = .kept { didSet { reloadFiches() } }
+    var lastMeaningfulRun: SyncRunRecord?
+    /// Binaire Claude Code réellement retenu (recherche faite hors du fil principal).
+    var claudeLocated: String?
     var showTour = false
     var editingTheme: ThemeDraft?
     /// Modèles installés dans Ollama (mis à jour à l'ouverture et dans les réglages).
@@ -68,6 +71,7 @@ final class AppModel {
             fatalError("Base locale illisible : \(error)")
         }
         WhatsAppSource.purgeStaleCopies()
+        try? store.closeInterruptedRuns()
         engine = SyncEngine(store: store, source: source)
         settings = AppSettings.load()
         showOnboarding = !settings.onboardingDone
@@ -80,6 +84,7 @@ final class AppModel {
             Task { await sync() }
         }
         Task { await refreshLocalModels() }
+        refreshClaudeLocation()
     }
 
     // MARK: Données
@@ -96,6 +101,7 @@ final class AppModel {
         themes = t
         themeUnread = tu
         lastRun = try? store.lastRun()
+        lastMeaningfulRun = try? store.lastMeaningfulRun()
         reloadFiches()
     }
 
@@ -210,6 +216,42 @@ final class AppModel {
             syncProgress = nil
             reload()
         }
+    }
+
+    func refreshClaudeLocation() {
+        let custom = settings.claudePath
+        Task {
+            let path = await Task.detached { ClaudeCodeProvider.locate(custom: custom)?.path }.value
+            claudeLocated = path
+        }
+    }
+
+    /// Groupe concerné par les commandes de menu : celui de la barre latérale, sinon celui de la fiche.
+    var currentConversation: ConversationRecord? {
+        let id: String?
+        switch sidebar {
+        case .group(let g)?, .theme(let g, _)?: id = g
+        default: id = selectedFiche?.conversationId ?? selectedOpportunity?.conversationId
+        }
+        return id.flatMap { i in conversations.first { $0.id == i } }
+    }
+
+    /// La fiche est-elle dans une autre langue que celle attendue (fiche antérieure à la règle) ?
+    func languageMismatch(_ fiche: FicheRecord) -> String? {
+        guard let conv = conversations.first(where: { $0.id == fiche.conversationId }), conv.mode == .knowledge,
+              let ficheLang = FicheLanguage.detect([fiche.question] + (fiche.decoded?.answers.map(\.summary) ?? [])) else { return nil }
+        var expected = conv.ficheLanguage(default: settings.ficheLanguage)
+        if expected.isEmpty {
+            let texts = ((try? store.messages(ofFiche: fiche.id)) ?? []).compactMap(\.text)
+            guard let detected = FicheLanguage.detect(texts) else { return nil }
+            expected = detected
+        }
+        return ficheLang == expected ? nil : expected
+    }
+
+    func regenerateInExpectedLanguage(_ fiche: FicheRecord) {
+        regenerate(fiche, with: ModelChoice(provider: settings.provider, model: settings.effectiveFicheModel(),
+                                            label: settings.effectiveFicheModel()))
     }
 
     func refreshLocalModels() async {

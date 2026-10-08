@@ -70,6 +70,15 @@ if let providerName {
     settings.provider = kind
 }
 
+// Si la copie de la base WhatsApp tarde, c'est presque toujours la demande d'autorisation
+// de macOS (« accéder aux données d'autres apps ») qui attend une réponse.
+let consentHint = Task {
+    try? await Task.sleep(nanoseconds: 15_000_000_000)
+    if !Task.isCancelled {
+        err("… toujours en attente de WhatsApp : si macOS demande d'autoriser l'accès aux données d'autres apps, acceptez la demande (elle concerne l'app qui a lancé distix-cli).")
+    }
+}
+
 do {
     let database = try dbPath.map { try AppDatabase.open(at: URL(fileURLWithPath: $0)) } ?? AppDatabase.openDefault()
     let store = Store(database)
@@ -78,9 +87,14 @@ do {
     let day = DateFormatter()
     day.dateFormat = "yyyy-MM-dd"
 
+    // Seules groups, select, sync et check lisent WhatsApp.
+    if !["groups", "select", "sync", "check"].contains(command) { consentHint.cancel() }
+
     switch command {
     case "groups":
-        for c in try await engine.refreshConversations() {
+        let list = try await engine.refreshConversations()
+        consentHint.cancel()
+        for c in list {
             let last = c.lastMessageAt.map { day.string(from: $0) } ?? "—"
             print("\(c.selected ? "[x]" : "[ ]") \(String(c.messageCount).padding(toLength: 6, withPad: " ", startingAt: 0)) \(last)  \(c.name)  [\(c.sourceId)]")
         }
@@ -88,6 +102,7 @@ do {
     case "select", "unselect":
         guard args.count >= 2 else { fail(usage) }
         _ = try await engine.refreshConversations()
+        consentHint.cancel()
         let matches = matching(args[1], in: try store.conversations())
         guard !matches.isEmpty else { fail("Aucun groupe ne contient « \(args[1]) ».") }
         let start = since.flatMap { day.date(from: $0) }
@@ -122,7 +137,10 @@ do {
 
     case "sync":
         let started = Date()
-        guard let summary = await engine.run(settings: settings, progress: { err($0) }) else {
+        guard let summary = await engine.run(settings: settings, progress: { step in
+            if !step.hasPrefix("Lecture de WhatsApp") { consentHint.cancel() }
+            err(step)
+        }) else {
             fail("Une synchronisation est déjà en cours.")
         }
         let elapsed = Int(Date().timeIntervalSince(started))
@@ -165,6 +183,7 @@ do {
 
     case "check":
         print("WhatsApp : \(await source.checkAvailability())")
+        consentHint.cancel()
         if settings.provider == .claudeCode {
             let all = ClaudeCodeProvider.candidates(custom: settings.claudePath)
             print("Claude Code : \(all.count) emplacement(s) trouvé(s), retenu : \(ClaudeCodeProvider.locate(custom: settings.claudePath)?.path ?? "aucun qui fonctionne")")

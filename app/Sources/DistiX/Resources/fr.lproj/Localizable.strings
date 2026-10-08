@@ -10,6 +10,7 @@
 "Actualiser la liste" = "Actualiser la liste";
 "Adresse du serveur" = "Adresse du serveur";
 "Adéquation à vos critères, sur 100" = "Adéquation à vos critères, sur 100";
+"Afficher" = "Afficher";
 "Afficher l'original" = "Afficher l'original";
 "Afficher la traduction" = "Afficher la traduction";
 "Afficher les vrais noms dans DistiX" = "Afficher les vrais noms dans DistiX";
@@ -51,6 +52,7 @@
 "Créer" = "Créer";
 "Date" = "Date";
 "Dernier traitement" = "Dernier traitement";
+"Dernière synchro" = "Dernière synchro";
 "Des fiches au lieu de fils de messages" = "Des fiches au lieu de fils de messages";
 "DistiX lit, en lecture seule, les messages que WhatsApp Desktop enregistre sur ce Mac. Il n'écrit jamais rien dans WhatsApp et n'utilise aucun appareil lié." = "DistiX lit, en lecture seule, les messages que WhatsApp Desktop enregistre sur ce Mac. Il n'écrit jamais rien dans WhatsApp et n'utilise aucun appareil lié.";
 "DistiX lit, sur votre Mac et en lecture seule, les groupes WhatsApp que vous choisissez, et en tire l'essentiel : vous n'avez plus à tout lire." = "DistiX lit, sur votre Mac et en lecture seule, les groupes WhatsApp que vous choisissez, et en tire l'essentiel : vous n'avez plus à tout lire.";
@@ -77,6 +79,7 @@
 "Exporter toute la base…" = "Exporter toute la base…";
 "Fermer" = "Fermer";
 "Fermer et synchroniser" = "Fermer et synchroniser";
+"Fiche" = "Fiche";
 "Fiches" = "Fiches";
 "Filtrer les groupes" = "Filtrer les groupes";
 "Fournisseur" = "Fournisseur";
@@ -87,6 +90,7 @@
 "Fusionner dans" = "Fusionner dans";
 "Garde surtout les échanges sur : [sujets qui m'intéressent]. Ignore : [sujets sans intérêt pour moi]." = "Garde surtout les échanges sur : [sujets qui m'intéressent]. Ignore : [sujets sans intérêt pour moi].";
 "Garder cette fiche dans la base de connaissances" = "Garder cette fiche dans la base de connaissances";
+"Groupe" = "Groupe";
 "Groupe d'entraide entre professionnels. Garde chaque question posée avec les réponses et les avis divergents, les retours d'expérience chiffrés et les ressources partagées (outils, contacts, liens)." = "Groupe d'entraide entre professionnels. Garde chaque question posée avec les réponses et les avis divergents, les retours d'expérience chiffrés et les ressources partagées (outils, contacts, liens).";
 "Groupe d'organisation d'une équipe. Garde les décisions prises, les règles, les informations pratiques durables (lieux, matériel, horaires réguliers, contacts) et les retours d'expérience. Ignore la coordination du jour même." = "Groupe d'organisation d'une équipe. Garde les décisions prises, les règles, les informations pratiques durables (lieux, matériel, horaires réguliers, contacts) et les retours d'expérience. Ignore la coordination du jour même.";
 "Groupes" = "Groupes";
@@ -128,6 +132,7 @@
 "Modifier le thème" = "Modifier le thème";
 "Modifier le thème…" = "Modifier le thème…";
 "Modèle local ou compatible OpenAI" = "Modèle local ou compatible OpenAI";
+"Modèle non enregistré (fiche rédigée avant cette information)" = "Modèle non enregistré (fiche rédigée avant cette information)";
 "Modèle pour les fiches" = "Modèle pour les fiches";
 "Modèle pour les fils" = "Modèle pour les fils";
 "Modèles locaux (Ollama)" = "Modèles locaux (Ollama)";
@@ -175,6 +180,7 @@
 "Rien de nouveau" = "Rien de nouveau";
 "Réglages" = "Réglages";
 "Réglages…" = "Réglages…";
+"Régénérer" = "Régénérer";
 "Régénérer avec" = "Régénérer avec";
 "Réponses" = "Réponses";
 "S'applique aux prochaines fiches ; « Retraiter ce groupe » reclasse les fiches existantes." = "S'applique aux prochaines fiches ; « Retraiter ce groupe » reclasse les fiches existantes.";
@@ -241,6 +247,7 @@
 "macOS demande votre autorisation." = "macOS demande votre autorisation.";
 "mis à jour" = "mis à jour";
 "nouveau" = "nouveau";
+"rien de nouveau" = "rien de nouveau";
 "À trier" = "À trier";
 "Écarter" = "Écarter";
 "Écartée" = "Écartée";

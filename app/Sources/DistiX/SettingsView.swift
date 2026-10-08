@@ -6,12 +6,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettings().tabItem { Label(L("Général"), systemImage: "gearshape") }
             GroupSettings().tabItem { Label(L("Groupes"), systemImage: "person.3") }
-            VStack {
-                AIProviderForm()
-                Form { LocalModelsSection() }.formStyle(.grouped)
-            }
-            .padding()
-            .tabItem { Label(L("IA"), systemImage: "sparkles") }
+            AIProviderForm(includeLocalModels: true)
+                .tabItem { Label(L("IA"), systemImage: "sparkles") }
             AdvancedSettings().tabItem { Label(L("Avancé"), systemImage: "slider.horizontal.3") }
         }
         .frame(width: 640, height: 640)
@@ -38,8 +34,14 @@ struct GeneralSettings: View {
                     if let p = model.syncProgress { Text(p).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                 }
             }
+            if let last = model.lastRun {
+                Section(L("Dernière synchro")) {
+                    Text(last.startedAt.formatted(date: .abbreviated, time: .shortened)
+                         + (last.messagesProcessed == 0 && last.inputTokens == 0 && last.error == nil ? " — " + L("rien de nouveau") : ""))
+                }
+            }
             Section(L("Dernier traitement")) {
-                if let run = model.lastRun {
+                if let run = model.lastMeaningfulRun {
                     LabeledContent(L("Date"), value: run.startedAt.formatted(date: .abbreviated, time: .shortened))
                     LabeledContent(L("Messages lus"), value: "\(run.messagesRead)")
                     LabeledContent(L("Fiches"), value: L("\(run.fichesCreated) créées, \(run.fichesUpdated) mises à jour, \(run.merges) fusions"))

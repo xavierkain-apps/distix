@@ -776,6 +776,24 @@ public final class Store: @unchecked Sendable {
         notify()
     }
 
+    /// Dernière synchronisation qui a réellement traité quelque chose.
+    public func lastMeaningfulRun() throws -> SyncRunRecord? {
+        try writer.read { db in
+            try SyncRunRecord.filter(Column("messagesProcessed") > 0 || Column("inputTokens") > 0 || Column("error") != nil)
+                .order(Column("startedAt").desc).fetchOne(db)
+        }
+    }
+
+    /// Au lancement : une synchro restée sans fin appartient à un processus disparu.
+    public func closeInterruptedRuns() throws {
+        try writer.write { db in
+            try db.execute(sql: """
+                UPDATE sync_runs SET finishedAt = startedAt, error = COALESCE(error, 'Interrompue (application quittée)')
+                WHERE finishedAt IS NULL
+                """)
+        }
+    }
+
     public func lastRun() throws -> SyncRunRecord? {
         try writer.read { db in try SyncRunRecord.order(Column("startedAt").desc).fetchOne(db) }
     }
