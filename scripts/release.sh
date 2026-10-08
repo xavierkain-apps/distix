@@ -30,9 +30,12 @@ if [[ $DRY_RUN == 0 ]]; then
 fi
 git rev-parse "v$VERSION" >/dev/null 2>&1 && { echo "Le tag v$VERSION existe déjà." >&2; exit 1; }
 
-IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/^.*"\(.*\)"$/\1/')
+# Par empreinte SHA-1 et non par nom : le trousseau peut contenir deux certificats
+# « Developer ID Application » au nom identique, et codesign refuse un nom ambigu.
+# SIGN_IDENTITY permet de choisir explicitement.
+IDENTITY="${SIGN_IDENTITY:-$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk '{print $2}')}"
 [[ -n "$IDENTITY" ]] || { echo "Aucune identité « Developer ID Application » dans le trousseau." >&2; exit 1; }
-echo "Signature : $IDENTITY"
+echo "Signature : $IDENTITY ($(security find-identity -v -p codesigning | grep "$IDENTITY" | sed 's/^.*"\(.*\)"$/\1/'))"
 
 SIGN_IDENTITY="$IDENTITY" DISTIX_VERSION="$VERSION" scripts/build-app.sh
 APP="$ROOT/build/DistiX.app"

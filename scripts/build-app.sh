@@ -1,7 +1,8 @@
 #!/bin/bash
 # Construit DistiX.app (universelle arm64 + x86_64) dans build/.
 #
-#   SIGN_IDENTITY   identité de signature (« Developer ID Application: … ») ; ad hoc si vide
+#   SIGN_IDENTITY   identité de signature, de préférence par empreinte SHA-1 (deuxième colonne de
+#                   `security find-identity -v -p codesigning`) : un nom peut être ambigu ; ad hoc si vide
 #   DISTIX_VERSION  version affichée (par défaut 0.1.0 ; la CI la tire du tag v…)
 #   DISTIX_ARCH     « native » pour ne construire que l'architecture de la machine
 #   DISTIX_OUT      dossier de sortie (par défaut build/), pour ne pas remplacer une app ouverte
