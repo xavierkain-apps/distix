@@ -47,8 +47,12 @@ final class WhatsAppSourceTests: XCTestCase {
         let stale = tempRoot.appendingPathComponent("distix-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
         try Data("copie oubliée".utf8).write(to: stale.appendingPathComponent("ChatStorage.sqlite"))
+        let live = tempRoot.appendingPathComponent("distix-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: live, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.creationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: stale.path)
         let snap = try await WhatsAppSource(databaseURL: dbURL, tempRoot: tempRoot).snapshot()
-        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))   // reste d'une synchro interrompue
+        XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))     // copie récente d'un autre processus
         snap.close()
     }
 

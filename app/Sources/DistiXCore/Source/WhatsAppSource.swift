@@ -23,11 +23,18 @@ public struct WhatsAppSource: MessageSource {
 
     /// Supprime les copies laissées par une synchronisation interrompue (app quittée ou
     /// arrêtée pendant la copie) : aucune copie de la base ne doit traîner (brief § 4.3).
-    public static func purgeStaleCopies(in root: URL = FileManager.default.temporaryDirectory) {
+    ///
+    /// L'app et distix-cli sont des processus distincts qui partagent ce dossier : on ne
+    /// touche qu'aux copies de plus de `olderThan` secondes. Une copie vivante ne dure que
+    /// le temps de la lecture (quelques secondes), jamais un quart d'heure.
+    public static func purgeStaleCopies(in root: URL = FileManager.default.temporaryDirectory,
+                                        olderThan age: TimeInterval = 15 * 60, now: Date = Date()) {
         let fm = FileManager.default
         for name in (try? fm.contentsOfDirectory(atPath: root.path)) ?? []
         where name.hasPrefix("distix-") && UUID(uuidString: String(name.dropFirst(7))) != nil {   // distix-<UUID> seulement
-            try? fm.removeItem(at: root.appendingPathComponent(name))
+            let url = root.appendingPathComponent(name)
+            let created = (try? fm.attributesOfItem(atPath: url.path)[.creationDate] as? Date) ?? now
+            if now.timeIntervalSince(created) > age { try? fm.removeItem(at: url) }
         }
     }
 
@@ -48,7 +55,7 @@ public struct WhatsAppSource: MessageSource {
     }
 
     public func snapshot() async throws -> SourceSnapshot {
-        Self.purgeStaleCopies(in: tempRoot)   // une seule synchro à la fois : tout reste est périmé
+        Self.purgeStaleCopies(in: tempRoot)
         return try WhatsAppSnapshot(original: databaseURL, tempRoot: tempRoot)
     }
 }

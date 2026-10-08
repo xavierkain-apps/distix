@@ -10,8 +10,14 @@
 # 4. écrit appcast.xml, pose le tag vX.Y.Z et publie la release GitHub (zip + appcast).
 #
 # Les apps installées vérifient https://github.com/xavierkain-apps/distix/releases/latest/download/appcast.xml.
+#
+#   scripts/release.sh X.Y.Z --dry-run   construit, signe Developer ID, notarise et signe pour
+#                                        Sparkle, sans poser de tag ni publier (à faire avant
+#                                        la première vraie release).
 set -euo pipefail
-VERSION="${1:?usage : scripts/release.sh X.Y.Z}"
+VERSION="${1:?usage : scripts/release.sh X.Y.Z [--dry-run]}"
+DRY_RUN=0
+[[ "${2:-}" == "--dry-run" ]] && DRY_RUN=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 NOTES="release-notes/$VERSION.fr.md"
@@ -19,7 +25,9 @@ NOTARY_PROFILE="${NOTARY_PROFILE:-inflow-notary}"
 
 [[ -f "$NOTES" ]] || { echo "Manque $NOTES (notes de version affichées par Sparkle)." >&2; exit 1; }
 grep -q ']]>' "$NOTES" && { echo "$NOTES contient ']]>'." >&2; exit 1; }
-[[ -z "$(git status --porcelain)" ]] || { echo "Arbre git non propre : commiter d'abord." >&2; exit 1; }
+if [[ $DRY_RUN == 0 ]]; then
+  [[ -z "$(git status --porcelain)" ]] || { echo "Arbre git non propre : commiter d'abord." >&2; exit 1; }
+fi
 git rev-parse "v$VERSION" >/dev/null 2>&1 && { echo "Le tag v$VERSION existe déjà." >&2; exit 1; }
 
 IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/^.*"\(.*\)"$/\1/')
@@ -70,6 +78,10 @@ URL="https://github.com/xavierkain-apps/distix/releases/download/v$VERSION/Disti
 xmllint --noout "$ROOT/build/appcast.xml"
 [[ "$(grep -o ' length=' "$ROOT/build/appcast.xml" | wc -l | tr -d ' ')" == "1" ]]
 
+if [[ $DRY_RUN == 1 ]]; then
+  echo "Répétition terminée : build/DistiX.app notarisée, build/appcast.xml écrit. Rien n'a été publié."
+  exit 0
+fi
 git tag "v$VERSION"
 git push origin "v$VERSION"
 gh release create "v$VERSION" "$ROOT/build/DistiX.zip" "$ROOT/build/appcast.xml" \
