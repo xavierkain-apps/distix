@@ -5,8 +5,17 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @State private var step = 0
+    @State private var toured = false
 
     var body: some View {
+        if !toured {
+            FeatureTour(onFinish: { toured = true })
+        } else {
+            steps
+        }
+    }
+
+    private var steps: some View {
         VStack(spacing: 0) {
             HStack {
                 ForEach(0..<3) { i in

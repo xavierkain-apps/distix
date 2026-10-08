@@ -6,10 +6,15 @@ struct SettingsView: View {
         TabView {
             GeneralSettings().tabItem { Label(L("Général"), systemImage: "gearshape") }
             GroupSettings().tabItem { Label(L("Groupes"), systemImage: "person.3") }
-            AIProviderForm().padding().tabItem { Label(L("IA"), systemImage: "sparkles") }
+            VStack {
+                AIProviderForm()
+                Form { LocalModelsSection() }.formStyle(.grouped)
+            }
+            .padding()
+            .tabItem { Label(L("IA"), systemImage: "sparkles") }
             AdvancedSettings().tabItem { Label(L("Avancé"), systemImage: "slider.horizontal.3") }
         }
-        .frame(width: 620, height: 520)
+        .frame(width: 640, height: 640)
     }
 }
 
@@ -56,6 +61,24 @@ struct GeneralSettings: View {
                 }
                 Text(L("Chaque groupe peut avoir sa propre langue (Objectif du groupe). S'applique aux prochaines fiches ; « Retraiter ce groupe » refait les existantes, ou traduisez une fiche à la demande."))
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(L("Mises à jour")) {
+                let updater = Updater.shared
+                LabeledContent(L("Version"), value: updater.version)
+                if updater.isAvailable {
+                    Toggle(L("Rechercher les mises à jour automatiquement"),
+                           isOn: Binding(get: { updater.checksAutomatically }, set: { updater.checksAutomatically = $0 }))
+                    HStack {
+                        Button(L("Rechercher maintenant")) { updater.checkNow() }
+                        if let last = updater.lastCheck {
+                            Text(L("Dernière vérification : \(last.formatted(date: .abbreviated, time: .shortened))"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Text(L("Version de développement : les mises à jour automatiques sont désactivées."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Section(L("Confidentialité")) {
                 Toggle(L("Remplacer les noms par des alias avant l'envoi à l'IA"), isOn: $model.settings.pseudonymize)

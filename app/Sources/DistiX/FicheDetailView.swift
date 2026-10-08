@@ -71,11 +71,27 @@ struct FicheDetailView: View {
         }
         .toolbar {
             ToolbarItemGroup {
+                Button { model.review(fiche, .validated) } label: {
+                    Label(fiche.review == .validated ? L("Validée") : L("Valider"),
+                          systemImage: fiche.review == .validated ? "checkmark.seal.fill" : "checkmark.seal")
+                }
+                .help(L("Garder cette fiche dans la base de connaissances"))
+                Button { model.review(fiche, .discarded) } label: {
+                    Label(fiche.review == .discarded ? L("Écartée") : L("Écarter"),
+                          systemImage: fiche.review == .discarded ? "xmark.bin.fill" : "xmark.bin")
+                }
+                .help(L("Retirer cette fiche de la base (elle reste visible dans « Écartées »)"))
                 Button { model.copyMarkdown(fiche) } label: { Label(L("Copier en Markdown"), systemImage: "doc.on.doc") }
                     .help(L("Copier en Markdown"))
                 Menu {
                     Button(L("Exporter en .md…")) { model.exportFiche(fiche) }
                     Button(L("Marquer comme non lue")) { model.markUnread(fiche.id) }
+                    Menu(L("Régénérer avec")) {
+                        ForEach(model.modelChoices) { choice in
+                            Button(choice.label) { model.regenerate(fiche, with: choice) }
+                        }
+                        if model.modelChoices.isEmpty { Text(L("Aucun modèle disponible")) }
+                    }
                     Menu(L("Traduire en")) {
                         ForEach(FicheLanguage.choices, id: \.code) { lang in
                             Button(lang.name.capitalized) { showOriginal = false; model.translate(fiche, to: lang.code) }
@@ -116,6 +132,9 @@ struct FicheDetailView: View {
                 Text(L("Du \(fiche.firstMessageAt.formatted(date: .abbreviated, time: .omitted)) au \(fiche.lastMessageAt.formatted(date: .abbreviated, time: .omitted))"))
             }
             .font(.callout).foregroundStyle(.secondary)
+            if let m = fiche.model {
+                Text(L("Rédigée par \(m)")).font(.caption).foregroundStyle(.secondary)
+            }
             if fiche.readState == .updated, let note = fiche.changeNote {
                 Label(note, systemImage: "arrow.triangle.2.circlepath").font(.callout)
                     .padding(8).frame(maxWidth: .infinity, alignment: .leading)

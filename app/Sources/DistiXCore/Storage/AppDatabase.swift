@@ -178,6 +178,14 @@ public final class AppDatabase: @unchecked Sendable {
                 t.add(column: "translationLanguage", .text)
             }
         }
+        m.registerMigration("v6") { db in
+            // Tri des fiches par l'utilisateur, modèle qui a rédigé la fiche, objectif d'un thème.
+            try db.alter(table: "fiches") { t in
+                t.add(column: "review", .text)
+                t.add(column: "model", .text)
+            }
+            try db.alter(table: "themes") { t in t.add(column: "objective", .text) }
+        }
         return m
     }
 }

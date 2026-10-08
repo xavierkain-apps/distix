@@ -29,6 +29,21 @@ struct MainView: View {
                     .help(L("Ajouter ou retirer des groupes"))
             }
             ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button(L("Exporter les fiches validées…")) { model.exportFolder(conversationId: nil, onlyValidated: true) }
+                    Button(L("Exporter toute la base…")) { model.exportFolder(conversationId: nil) }
+                } label: { Label(L("Exporter"), systemImage: "square.and.arrow.up") }
+                .help(L("Exporter en Markdown"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                SettingsLink { Label(L("Réglages"), systemImage: "gearshape") }
+                    .help(L("Réglages"))
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { model.showTour = true } label: { Label(L("Découvrir DistiX"), systemImage: "questionmark.circle") }
+                    .help(L("Découvrir DistiX"))
+            }
+            ToolbarItem(placement: .primaryAction) {
                 if model.isSyncing {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
@@ -40,6 +55,8 @@ struct MainView: View {
                 }
             }
         }
+        .sheet(isPresented: $model.showTour) { FeatureTour(onFinish: { model.showTour = false }) }
+        .sheet(item: $model.editingTheme) { draft in ThemeSheet(draft: draft).environment(model) }
         .sheet(item: $model.editingGoal) { c in
             GroupGoalSheet(conversation: c).environment(model)
         }
@@ -74,6 +91,7 @@ struct SidebarView: View {
                                 .badge(model.themeUnread[t.id!] ?? 0)
                                 .tag(SidebarItem.theme(c.id, t.id!))
                                 .contextMenu { themeMenu(t, in: c.id) }
+                                .help(t.objective ?? "")
                         }
                     } label: {
                         Label(c.name, systemImage: c.mode == .watch ? "binoculars" : (c.syncIntervalHours == nil ? "person.3" : "person.3.sequence"))
@@ -81,6 +99,9 @@ struct SidebarView: View {
                             .tag(SidebarItem.group(c.id))
                             .contextMenu {
                                 Button(L("Objectif du groupe…")) { model.editingGoal = c }
+                                if c.mode == .knowledge {
+                                    Button(L("Nouveau thème…")) { model.newTheme(in: c.id) }
+                                }
                                 Button(L("Gérer les groupes…")) { model.showGroups = true }
                                 Button(L("Exporter ce groupe…")) { model.exportFolder(conversationId: c.id) }
                                 Button(L("Tout marquer comme lu")) { try? model.store.markAllRead(conversationId: c.id) }
@@ -138,6 +159,7 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func themeMenu(_ t: ThemeRecord, in conversationId: String) -> some View {
+        Button(L("Modifier le thème…")) { model.edit(t) }
         Button(L("Renommer…")) { newName = t.name; renaming = t }
         Menu(L("Fusionner dans")) {
             ForEach((model.themes[conversationId] ?? []).filter { $0.id != t.id }) { other in
@@ -190,6 +212,13 @@ struct FicheListView: View {
         .navigationTitle(title)
         .toolbar {
             ToolbarItemGroup {
+                Picker(L("Tri"), selection: $model.reviewFilter) {
+                    Text(L("Toutes (sauf écartées)")).tag(Store.ReviewFilter.kept)
+                    Text(L("À trier")).tag(Store.ReviewFilter.toReview)
+                    Text(L("Validées")).tag(Store.ReviewFilter.validated)
+                    Text(L("Écartées")).tag(Store.ReviewFilter.discarded)
+                }
+                .pickerStyle(.menu)
                 Picker(L("Statut"), selection: $model.statusFilter) {
                     Text(L("Tous les statuts")).tag(FicheStatus?.none)
                     ForEach(FicheStatus.allCases, id: \.self) { s in
@@ -227,7 +256,12 @@ struct FicheRow: View {
                         .background(fiche.readState == .updated ? Color.orange.opacity(0.2) : Color.accentColor.opacity(0.2),
                                     in: Capsule())
                 }
+                if fiche.review == .validated {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.green).help(L("Validée"))
+                }
                 Text(fiche.question).font(fiche.isUnread ? .body.bold() : .body).lineLimit(3)
+                    .foregroundStyle(fiche.review == .discarded ? .secondary : .primary)
+                    .strikethrough(fiche.review == .discarded)
             }
             HStack(spacing: 8) {
                 StatusBadge(status: fiche.status)
@@ -289,5 +323,39 @@ struct GroupsSheet: View {
         .sheet(item: Binding(get: { model.editingGoal }, set: { model.editingGoal = $0 })) { c in
             GroupGoalSheet(conversation: c).environment(model)
         }
+    }
+}
+
+/// Création ou modification d'un thème : nom et objectif.
+struct ThemeSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State var draft: AppModel.ThemeDraft
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(draft.themeId == nil ? L("Nouveau thème") : L("Modifier le thème")).font(.title2.bold())
+            TextField(L("Nom du thème"), text: $draft.name).textFieldStyle(.roundedBorder)
+            Text(L("Objectif du thème")).font(.headline)
+            Text(L("Décrivez précisément ce que ce thème doit rassembler et ce qui vous intéresse. L'IA s'en sert pour classer les fiches et pour mettre en avant ce qui sert cet objectif."))
+                .font(.callout).foregroundStyle(.secondary)
+            TextEditor(text: $draft.objective)
+                .frame(minHeight: 120)
+                .padding(4)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+            Text(L("Exemple : « Réglages et matériel de parapente : noms exacts des modèles, tailles, réglages des trims et freins, avec les chiffres donnés. »"))
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button(L("Annuler"), role: .cancel) { dismiss() }
+                Button(L("Enregistrer")) { model.saveTheme(draft); dismiss() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            Text(L("S'applique aux prochaines fiches ; « Retraiter ce groupe » reclasse les fiches existantes."))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .frame(width: 560)
     }
 }

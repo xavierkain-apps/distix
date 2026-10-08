@@ -126,6 +126,15 @@ public actor SyncEngine {
         return summary
     }
 
+    /// Régénère une fiche avec un autre fournisseur ou modèle (action de l'interface).
+    public func regenerate(ficheId: String, provider kind: ProviderKind, model: String, settings: AppSettings) async throws {
+        var s = settings
+        s.provider = kind
+        let provider = try providerOverride ?? ProviderFactory.make(s)
+        try await Pipeline(store: store, provider: provider, embedder: embedder, settings: s)
+            .regenerate(ficheId: ficheId, model: model)
+    }
+
     /// Traduit une fiche à la demande (action de l'interface).
     public func translate(ficheId: String, to language: String, settings: AppSettings) async throws {
         let provider = try providerOverride ?? ProviderFactory.make(settings)

@@ -6,6 +6,7 @@ extension ThreadRecord.State: DatabaseValueConvertible {}
 extension FicheStatus: DatabaseValueConvertible {}
 extension ReadState: DatabaseValueConvertible {}
 extension GroupMode: DatabaseValueConvertible {}
+extension ReviewState: DatabaseValueConvertible {}
 
 public extension Notification.Name {
     /// Émise après toute écriture visible dans l'interface.
@@ -478,7 +479,7 @@ public final class Store: @unchecked Sendable {
                                            arguments: [conversationId, clean]) {
                 return id
             }
-            var t = ThemeRecord(id: nil, conversationId: conversationId, name: clean.isEmpty ? "Divers" : clean)
+            var t = ThemeRecord(id: nil, conversationId: conversationId, name: clean.isEmpty ? "Divers" : clean, objective: nil)
             try t.insert(db)
             return t.id!
         }
@@ -552,11 +553,18 @@ public final class Store: @unchecked Sendable {
         public var unreadOnly = false
         public var status: FicheStatus?
         public var search: String?
+        public var review: ReviewFilter = .kept
         public init(conversationId: String? = nil, themeId: Int64? = nil, unreadOnly: Bool = false,
-                    status: FicheStatus? = nil, search: String? = nil) {
+                    status: FicheStatus? = nil, search: String? = nil, review: ReviewFilter = .kept) {
             self.conversationId = conversationId; self.themeId = themeId; self.unreadOnly = unreadOnly
-            self.status = status; self.search = search
+            self.status = status; self.search = search; self.review = review
         }
+    }
+
+    public enum ReviewFilter: String, CaseIterable, Sendable {
+        /// Toutes sauf les écartées (par défaut).
+        case kept
+        case toReview, validated, discarded, all
     }
 
     public func fiches(_ q: FicheQuery) throws -> [FicheRecord] {
@@ -566,6 +574,13 @@ public final class Store: @unchecked Sendable {
             if let t = q.themeId { request = request.filter(Column("themeId") == t) }
             if q.unreadOnly { request = request.filter(Column("readAt") == nil) }
             if let s = q.status { request = request.filter(Column("status") == s.rawValue) }
+            switch q.review {
+            case .kept: request = request.filter(Column("review") == nil || Column("review") != ReviewState.discarded.rawValue)
+            case .toReview: request = request.filter(Column("review") == nil)
+            case .validated: request = request.filter(Column("review") == ReviewState.validated.rawValue)
+            case .discarded: request = request.filter(Column("review") == ReviewState.discarded.rawValue)
+            case .all: break
+            }
             if let text = q.search?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
                 let ids = try String.fetchAll(db, sql: "SELECT ficheId FROM fiches_fts WHERE fiches_fts MATCH ? ORDER BY rank",
                                               arguments: [Self.ftsQuery(text)])
@@ -587,7 +602,7 @@ public final class Store: @unchecked Sendable {
             var out: [String: Int] = [:]
             for row in try Row.fetchAll(db, sql: """
                 SELECT conversationId, COUNT(*) AS n FROM (
-                    SELECT conversationId FROM fiches WHERE readAt IS NULL
+                    SELECT conversationId FROM fiches WHERE readAt IS NULL AND (review IS NULL OR review != 'discarded')
                     UNION ALL SELECT conversationId FROM opportunities WHERE readAt IS NULL)
                 GROUP BY 1
                 """) {
@@ -602,13 +617,25 @@ public final class Store: @unchecked Sendable {
             var out: [Int64: (total: Int, unread: Int)] = [:]
             for row in try Row.fetchAll(db, sql: """
                 SELECT themeId, COUNT(*) AS n, SUM(readAt IS NULL) AS u FROM fiches
-                WHERE conversationId = ? AND themeId IS NOT NULL GROUP BY themeId
+                WHERE conversationId = ? AND themeId IS NOT NULL AND (review IS NULL OR review != 'discarded')
+                GROUP BY themeId
                 """, arguments: [conversationId]) {
                 let id: Int64 = row["themeId"]
                 out[id] = (total: row["n"], unread: row["u"])
             }
             return out
         }
+    }
+
+    /// Valide ou écarte une fiche (nil = à trier). Une fiche écartée est aussi marquée lue.
+    public func setReview(_ id: String, _ review: ReviewState?) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE fiches SET review = ? WHERE id = ?", arguments: [review, id])
+            if review == .discarded {
+                try db.execute(sql: "UPDATE fiches SET readAt = COALESCE(readAt, ?) WHERE id = ?", arguments: [Date(), id])
+            }
+        }
+        notify()
     }
 
     public func markRead(_ id: String, read: Bool) throws {
@@ -649,6 +676,29 @@ public final class Store: @unchecked Sendable {
             }
         }
         notify()
+    }
+
+    /// Crée ou modifie un thème défini par l'utilisateur (nom et objectif).
+    @discardableResult
+    public func saveTheme(id: Int64?, conversationId: String, name: String, objective: String?) throws -> Int64 {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let goal = objective?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tid: Int64
+        if let id {
+            try renameTheme(id, to: clean)
+            tid = try writer.read { db in
+                try Int64.fetchOne(db, sql: "SELECT id FROM themes WHERE conversationId = ? AND name = ?",
+                                   arguments: [conversationId, clean]) ?? id
+            }
+        } else {
+            tid = try themeId(named: clean, in: conversationId)
+        }
+        try writer.write { db in
+            try db.execute(sql: "UPDATE themes SET objective = ? WHERE id = ?",
+                           arguments: [goal?.isEmpty == false ? goal : nil, tid])
+        }
+        notify()
+        return tid
     }
 
     public func renameTheme(_ id: Int64, to name: String) throws {
@@ -702,7 +752,9 @@ public final class Store: @unchecked Sendable {
                               "SELECT COUNT(DISTINCT ficheId) FROM fiche_threads WHERE mergedFromFicheId IS NOT NULL"),
                              ("thèmes", "SELECT COUNT(*) FROM themes"),
                              ("opportunités (veille)", "SELECT COUNT(*) FROM opportunities"),
-                             ("fiches non lues", "SELECT COUNT(*) FROM fiches WHERE readAt IS NULL")] {
+                             ("fiches non lues", "SELECT COUNT(*) FROM fiches WHERE readAt IS NULL"),
+                             ("fiches validées", "SELECT COUNT(*) FROM fiches WHERE review = 'validated'"),
+                             ("fiches écartées", "SELECT COUNT(*) FROM fiches WHERE review = 'discarded'")] {
                 out[k] = try Int.fetchOne(db, sql: sql) ?? 0
             }
             return out

@@ -159,7 +159,7 @@ public final class Pipeline: @unchecked Sendable {
             embedding: try await embedding(for: content),
             firstMessageAt: messages.first?.sentAt ?? Date(), lastMessageAt: messages.last?.sentAt ?? Date(),
             createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil,
-            translation: nil, translationLanguage: nil)
+            translation: nil, translationLanguage: nil, review: nil, model: writer.modelLabel)
         try store.saveFiche(fiche, threadIds: threadIds)
         return fiche
     }
@@ -167,15 +167,16 @@ public final class Pipeline: @unchecked Sendable {
     /// Régénère une fiche à partir de tous ses fils. Renvoie true si le fond a changé
     /// (la fiche redevient alors non lue).
     @discardableResult
-    func regenerate(ficheId: String, forceUnread: Bool = false, note: String? = nil,
+    func regenerate(ficheId: String, forceUnread: Bool = false, note: String? = nil, model: String? = nil,
                     usage: inout LLMUsage) async throws -> Bool {
         guard var fiche = try store.fiche(ficheId) else { return false }
         let threadIds = try store.threadIds(ofFiche: ficheId)
         let messages = try store.messages(ofThreads: threadIds)
         let pseudo = try pseudonymizer(for: [fiche.conversationId] + messages.map(\.conversationId))
-        let writer = FicheWriter(store: store, provider: provider, settings: settings)
+        let writer = FicheWriter(store: store, provider: provider, settings: settings, modelOverride: model)
+        // Régénération demandée avec un autre modèle : on repart de zéro, sans la version précédente.
         let result = try await writer.write(conversationId: fiche.conversationId, threadIds: threadIds,
-                                            previous: fiche.decoded, pseudo: pseudo, usage: &usage)
+                                            previous: model == nil ? fiche.decoded : nil, pseudo: pseudo, usage: &usage)
         try store.clearNeedsFiche(threadIds)
         guard let content = result.content else { return false }
         let changed = forceUnread || result.materialChange
@@ -187,6 +188,8 @@ public final class Pipeline: @unchecked Sendable {
         fiche.firstMessageAt = messages.first?.sentAt ?? fiche.firstMessageAt
         fiche.lastMessageAt = messages.last?.sentAt ?? fiche.lastMessageAt
         fiche.updatedAt = Date()
+        fiche.model = writer.modelLabel
+        if model != nil, let tid = try? store.themeId(named: content.theme, in: fiche.conversationId) { fiche.themeId = tid }
         fiche.translation = nil            // traduction périmée
         fiche.translationLanguage = nil
         if changed {
@@ -241,6 +244,13 @@ public final class Pipeline: @unchecked Sendable {
         stats.usage += usage
     }
 
+    /// Régénère une fiche avec un modèle choisi par l'utilisateur.
+    public func regenerate(ficheId: String, model: String) async throws {
+        var usage = LLMUsage()
+        try await regenerate(ficheId: ficheId, model: model, usage: &usage)
+        stats.usage += usage
+    }
+
     /// Traduit une fiche à la demande ; l'original est conservé.
     public func translate(ficheId: String, to language: String) async throws {
         guard let fiche = try store.fiche(ficheId), let content = fiche.decoded else { return }
@@ -275,7 +285,7 @@ public final class Pipeline: @unchecked Sendable {
                 content: try JSONEncoder.distix.encode(content), embedding: try await embedding(for: content),
                 firstMessageAt: messages.first?.sentAt ?? Date(), lastMessageAt: messages.last?.sentAt ?? Date(),
                 createdAt: Date(), updatedAt: Date(), readAt: nil, readState: .new, changeNote: nil,
-                translation: nil, translationLanguage: nil)
+                translation: nil, translationLanguage: nil, review: nil, model: writer.modelLabel)
             try store.saveFiche(restored, threadIds: [])
             try store.detachThreads(threadIds, to: originalId)
         }

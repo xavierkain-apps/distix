@@ -18,9 +18,14 @@ jobs:
 
   app:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 60
+    permissions:
+      # Écriture uniquement pour publier la release sur un tag v*.
+      contents: write
+    env:
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Versions
@@ -28,10 +33,135 @@ jobs:
       - name: Tests du cœur (base factice)
         working-directory: app
         run: swift test
+
+      # Signature Developer ID et notarisation sur les tags seulement (même certificat que
+      # QuiX, secrets d'organisation). Les autres constructions sont signées ad hoc.
+      - name: Importer le certificat Developer ID
+        if: env.IS_RELEASE == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then
+            echo "::error::MACOS_CERT_P12 n'est pas visible par ce dépôt (secret d'organisation non partagé avec distix ?)."
+            exit 1
+          fi
+          RAW="$RUNNER_TEMP/cert.p12"
+          CLEAN=$(printf '%s' "$MACOS_CERT_P12" | tr -d '[:space:]')
+          if printf '%s' "$CLEAN" | head -c 4 | grep -qiE '^3082$'; then
+            printf '%s' "$CLEAN" | xxd -r -p > "$RAW"
+          else
+            printf '%s' "$CLEAN" | base64 --decode > "$RAW"
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RAW" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm "$RAW"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | grep "Developer ID Application" | head -1 | sed 's/^.*"\(.*\)"$/\1/')
+          [ -n "$IDENTITY" ] || { echo "::error::Aucune identité « Developer ID Application » dans le certificat"; exit 1; }
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
       - name: Construction de DistiX.app
-        run: scripts/build-app.sh
+        run: |
+          if [ "$IS_RELEASE" = "true" ]; then export DISTIX_VERSION="${GITHUB_REF_NAME#v}"; fi
+          scripts/build-app.sh
+
+      - name: Vérifier le bundle
+        run: |
+          APP=build/DistiX.app
+          lipo -archs "$APP/Contents/MacOS/DistiX" | grep -q arm64
+          lipo -archs "$APP/Contents/MacOS/DistiX" | grep -q x86_64
+          test -d "$APP/Contents/Frameworks/Sparkle.framework"
+          otool -l "$APP/Contents/MacOS/DistiX" | grep -A2 LC_RPATH | grep -q "@executable_path/../Frameworks"
+          if [ "$IS_RELEASE" = "true" ]; then
+            [ -n "$(plutil -extract SUPublicEDKey raw "$APP/Contents/Info.plist")" ] \
+              || { echo "::error::SUPublicEDKey vide : app/sparkle-public-key.txt manquant"; exit 1; }
+            codesign --display --verbose=4 "$APP" 2>&1 | grep -q "Authority=Developer ID Application"
+            if codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+              echo "::error::get-task-allow présent, Apple refusera la notarisation"; exit 1
+            fi
+          fi
+
+      - name: Notariser
+        if: env.IS_RELEASE == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          APP=build/DistiX.app
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          RESULT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait --output-format json)
+          echo "$RESULT"
+          if [ "$(echo "$RESULT" | jq -r '.status')" != "Accepted" ]; then
+            xcrun notarytool log "$(echo "$RESULT" | jq -r '.id')" --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID"
+            exit 1
+          fi
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose "$APP"
+          (cd build && rm -f DistiX.zip && ditto -c -k --keepParent DistiX.app DistiX.zip)
+
       - uses: actions/upload-artifact@v4
         with:
           name: DistiX
           path: build/DistiX.zip
           if-no-files-found: error
+
+      # Signature EdDSA de Sparkle : l'app installée n'accepte que les archives signées par
+      # la clé dont elle porte la moitié publique (docs/UPDATES.md).
+      - name: Signer la mise à jour et écrire l'appcast
+        if: env.IS_RELEASE == 'true'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          [ -n "$SPARKLE_PRIVATE_KEY" ] || { echo "::error::SPARKLE_PRIVATE_KEY manquant"; exit 1; }
+          BIN=$(find app/.build/artifacts -name sign_update -type f | head -1)
+          [ -n "$BIN" ] || { echo "::error::sign_update introuvable"; exit 1; }
+          SIGNATURE=$(printf '%s' "$SPARKLE_PRIVATE_KEY" | "$BIN" --ed-key-file - build/DistiX.zip)
+          echo "$SIGNATURE" | grep -q 'sparkle:edSignature' || { echo "::error::pas de signature"; exit 1; }
+          SIGNATURE=$(printf '%s' "$SIGNATURE" | sed -E 's/[[:space:]]*length="[0-9]+"//')
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD=$(plutil -extract CFBundleVersion raw build/DistiX.app/Contents/Info.plist)
+          NOTES="release-notes/$VERSION.fr.md"
+          [ -f "$NOTES" ] || { echo "::error::$NOTES manquant"; exit 1; }
+          if grep -q ']]>' "$NOTES"; then echo "::error::$NOTES contient ']]>'"; exit 1; fi
+          LENGTH=$(stat -f%z build/DistiX.zip)
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/DistiX.zip"
+          {
+            echo '<?xml version="1.0" encoding="utf-8"?>'
+            echo '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
+            echo '  <channel>'
+            echo '    <title>DistiX</title>'
+            echo '    <item>'
+            echo "      <title>DistiX ${VERSION}</title>"
+            echo "      <pubDate>$(date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>"
+            echo "      <sparkle:version>${BUILD}</sparkle:version>"
+            echo "      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>"
+            echo '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>'
+            echo '      <description sparkle:format="markdown"><![CDATA['
+            cat "$NOTES"
+            echo '      ]]></description>'
+            echo "      <enclosure url=\"${URL}\" length=\"${LENGTH}\" type=\"application/octet-stream\" ${SIGNATURE} />"
+            echo '    </item>'
+            echo '  </channel>'
+            echo '</rss>'
+          } > build/appcast.xml
+          cat build/appcast.xml
+          xmllint --noout build/appcast.xml
+          [ "$(grep -o ' length=' build/appcast.xml | wc -l | tr -d ' ')" = "1" ]
+
+      - name: Publier la release
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/DistiX.zip build/appcast.xml \
+            --title "DistiX $GITHUB_REF_NAME" --notes-file "release-notes/${GITHUB_REF_NAME#v}.fr.md"

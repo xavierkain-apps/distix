@@ -67,6 +67,10 @@ struct FicheWriter {
         var threadSummary: String
     }
 
+    var modelOverride: String? = nil
+
+    var modelLabel: String { "\(provider.displayName) · \(modelOverride ?? settings.effectiveFicheModel())" }
+
     func write(conversationId: String, threadIds: [Int64], previous: FicheContent?,
                pseudo: Pseudonymizer, usage: inout LLMUsage) async throws -> Result {
         let conversation = try store.conversation(conversationId)
@@ -83,13 +87,19 @@ struct FicheWriter {
             keyOf[m.sourceId] = "m\(i + 1)"
             sourceOfKey["m\(i + 1)"] = m.sourceId
         }
-        let themes = try store.themes(in: conversationId).map(\.name)
+        let themeRecords = try store.themes(in: conversationId)
+        let themes = themeRecords.map { t in t.objective.map { "\(t.name) (objectif : \($0))" } ?? t.name }
         var prompt = ""
         if let focus, !focus.isEmpty {
             prompt += "CONSIGNES DE L'UTILISATEUR POUR CE GROUPE (ce qui l'intéresse ; elles priment pour décider is_knowledge et ce que la fiche met en avant)\n\(focus)\n\n"
         }
-        prompt += FicheLanguage.instruction(language) + "\n\n"
-        prompt += "THÈMES EXISTANTS : " + (themes.isEmpty ? "(aucun, propose-en un)" : themes.joined(separator: ", ")) + "\n\n"
+        prompt += FicheLanguage.instruction(language, messages: messages.compactMap(\.text)) + "\n\n"
+        prompt += "THÈMES EXISTANTS : " + (themes.isEmpty ? "(aucun, propose-en un)" : themes.joined(separator: " ; ")) + "\n"
+        if themeRecords.contains(where: { $0.objective != nil }) {
+            prompt += "Un thème avec un objectif a été défini par l'utilisateur : classe-y la fiche quand elle sert cet objectif, "
+                + "et mets en avant dans la fiche ce qui le sert. Pour `theme`, renvoie le nom du thème seul, sans l'objectif.\n"
+        }
+        prompt += "\n"
         if let previous {
             // La version précédente référence des identifiants source : on les traduit.
             var p = previous
@@ -106,7 +116,7 @@ struct FicheWriter {
         }
 
         let request = LLMRequest(system: CoreResources.prompt("fiche"), user: prompt, schema: Self.schema,
-                                 model: settings.effectiveFicheModel(), maxTokens: 6000)
+                                 model: modelOverride ?? settings.effectiveFicheModel(), maxTokens: 6000)
         let (out, u) = try await provider.generate(request, as: Output.self)
         usage += u
         guard out.is_knowledge, !out.question.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -124,7 +134,7 @@ struct FicheWriter {
         var status = FicheStatus(rawValue: out.status) ?? .repondue
         if answers.isEmpty { status = .sans_reponse }
         let content = FicheContent(question: out.question, context: out.context, status: status,
-                                   theme: out.theme.isEmpty ? "Divers" : out.theme, answers: answers,
+                                   theme: Self.cleanTheme(out.theme), answers: answers,
                                    disagreements: out.disagreements, openPoints: out.open_points,
                                    links: Self.verifiedLinks(out.links, in: messages))
         return Result(content: content, skipReason: nil, materialChange: out.material_change, changeNote: out.change_note,
@@ -133,6 +143,12 @@ struct FicheWriter {
 }
 
 extension FicheWriter {
+    /// Le modèle recopie parfois l'objectif du thème avec son nom : on ne garde que le nom.
+    static func cleanTheme(_ raw: String) -> String {
+        let name = raw.components(separatedBy: " (objectif").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Divers" : name
+    }
+
     /// Seuls les liens réellement présents dans les messages sont conservés.
     static func verifiedLinks(_ links: [String], in messages: [MessageRecord]) -> [String] {
         let text = messages.compactMap(\.text).joined(separator: "\n")

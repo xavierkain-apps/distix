@@ -34,6 +34,12 @@ final class AppModel {
     var themeUnread: [Int64: Int] = [:]
     var sidebar: SidebarItem? = .news { didSet { sessionRead.removeAll(); reloadFiches() } }
     var statusFilter: FicheStatus? { didSet { reloadFiches() } }
+    var reviewFilter: Store.ReviewFilter = .kept { didSet { reloadFiches() } }
+    var showTour = false
+    var editingTheme: ThemeDraft?
+    /// Modèles installés dans Ollama (mis à jour à l'ouverture et dans les réglages).
+    var localModels: [String] = []
+    var ollamaRunning = false
     var searchText = "" { didSet { reloadFiches() } }
     var fiches: [FicheRecord] = []
     var opportunities: [OpportunityRecord] = []
@@ -72,6 +78,7 @@ final class AppModel {
             scheduleTimer()
             Task { await sync() }
         }
+        Task { await refreshLocalModels() }
     }
 
     // MARK: Données
@@ -92,7 +99,7 @@ final class AppModel {
     }
 
     func reloadFiches() {
-        var q = Store.FicheQuery(status: statusFilter)
+        var q = Store.FicheQuery(status: statusFilter, review: reviewFilter)
         let search = searchText.trimmingCharacters(in: .whitespaces)
         if !search.isEmpty {
             q.search = search
@@ -111,7 +118,7 @@ final class AppModel {
         fiches = list
         // Opportunités (mode veille) : pas de thème, pas de statut.
         var opps: [OpportunityRecord] = []
-        if q.themeId == nil && statusFilter == nil {
+        if q.themeId == nil && statusFilter == nil && reviewFilter == .kept {
             opps = (try? store.opportunities(conversationId: q.conversationId, unreadOnly: q.unreadOnly, search: q.search)) ?? []
             if q.unreadOnly {
                 let kept = sessionRead.compactMap(Self.opportunityId).compactMap { try? store.opportunity($0) }
@@ -155,6 +162,81 @@ final class AppModel {
         sessionRead.insert(id)
         if let oid = Self.opportunityId(id) { try? store.markOpportunityRead(oid, read: false) }
         else { try? store.markRead(id, read: false) }
+    }
+
+    // MARK: Tri, modèles, thèmes
+
+    /// Valide ou écarte la fiche, puis passe à la suivante de la liste.
+    func review(_ fiche: FicheRecord, _ state: ReviewState?) {
+        let index = fiches.firstIndex { $0.id == fiche.id }
+        try? store.setReview(fiche.id, fiche.review == state ? nil : state)
+        if fiche.review != state, let index, index + 1 < fiches.count {
+            selectedFicheId = fiches[index + 1].id
+        }
+    }
+
+    struct ModelChoice: Identifiable, Hashable {
+        var id: String { "\(provider.rawValue):\(model)" }
+        let provider: ProviderKind
+        let model: String
+        let label: String
+    }
+
+    /// Modèles proposés pour régénérer une fiche, selon ce qui est disponible sur ce Mac.
+    var modelChoices: [ModelChoice] {
+        var out: [ModelChoice] = []
+        if !ClaudeCodeProvider.candidates(custom: settings.claudePath).isEmpty {
+            out += [("haiku", "Haiku (rapide)"), ("sonnet", "Sonnet (équilibré)"), ("opus", "Opus (le plus capable)")]
+                .map { ModelChoice(provider: .claudeCode, model: $0.0, label: "Claude Code · \($0.1)") }
+        }
+        if Keychain.get(ProviderFactory.anthropicKeyAccount)?.isEmpty == false {
+            out += [("claude-haiku-4-5", "Haiku 4.5"), ("claude-sonnet-5", "Sonnet 5"), ("claude-opus-5", "Opus 5")]
+                .map { ModelChoice(provider: .anthropic, model: $0.0, label: "API Anthropic · \($0.1)") }
+        }
+        out += localModels.map { ModelChoice(provider: .openAICompatible, model: $0, label: L("Local · \($0)")) }
+        return out
+    }
+
+    func regenerate(_ fiche: FicheRecord, with choice: ModelChoice) {
+        Task {
+            isSyncing = true
+            syncProgress = L("Régénération avec \(choice.label)…")
+            var s = settings
+            if choice.provider == .openAICompatible { s.openAIBaseURL = OllamaClient().openAIBaseURL.absoluteString }
+            do { try await engine.regenerate(ficheId: fiche.id, provider: choice.provider, model: choice.model, settings: s) }
+            catch { alert = error.localizedDescription }
+            isSyncing = false
+            syncProgress = nil
+            reload()
+        }
+    }
+
+    func refreshLocalModels() async {
+        let client = OllamaClient()
+        ollamaRunning = await client.isRunning()
+        localModels = ollamaRunning ? ((try? await client.installedModels()) ?? []) : []
+    }
+
+    struct ThemeDraft: Identifiable {
+        let id = UUID()
+        var themeId: Int64?
+        var conversationId: String
+        var name: String
+        var objective: String
+    }
+
+    func newTheme(in conversationId: String) {
+        editingTheme = ThemeDraft(themeId: nil, conversationId: conversationId, name: "", objective: "")
+    }
+
+    func edit(_ theme: ThemeRecord) {
+        editingTheme = ThemeDraft(themeId: theme.id, conversationId: theme.conversationId, name: theme.name,
+                                  objective: theme.objective ?? "")
+    }
+
+    func saveTheme(_ draft: ThemeDraft) {
+        guard !draft.name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        try? store.saveTheme(id: draft.themeId, conversationId: draft.conversationId, name: draft.name, objective: draft.objective)
     }
 
     // MARK: Objectif du groupe et veille
@@ -350,7 +432,7 @@ final class AppModel {
     }
 
     /// Exporte un groupe (ou toute la base si nil) dans un dossier choisi.
-    func exportFolder(conversationId: String?) {
+    func exportFolder(conversationId: String?, onlyValidated: Bool = false) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -358,7 +440,7 @@ final class AppModel {
         panel.prompt = L("Exporter ici")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let list = try store.fiches(.init(conversationId: conversationId))
+            let list = try store.fiches(.init(conversationId: conversationId, review: onlyValidated ? .validated : .kept))
             let n = try MarkdownExporter(store: store, showRealNames: settings.showRealNames)
                 .export(list, to: url, includeSources: true)
             alert = L("\(n) fiches exportées.")

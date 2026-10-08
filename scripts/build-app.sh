@@ -1,8 +1,14 @@
 #!/bin/bash
-# Construit DistiX.app (universelle arm64 + x86_64) dans build/, signée ad hoc par
-# défaut, ou avec l'identité donnée dans SIGN_IDENTITY (« Developer ID Application: … »).
-# DISTIX_OUT choisit le dossier de sortie (par défaut build/), pour ne pas remplacer une app ouverte.
-# Hardened Runtime activé, app non sandboxée (brief § 8).
+# Construit DistiX.app (universelle arm64 + x86_64) dans build/.
+#
+#   SIGN_IDENTITY   identité de signature (« Developer ID Application: … ») ; ad hoc si vide
+#   DISTIX_VERSION  version affichée (par défaut 0.1.0 ; la CI la tire du tag v…)
+#   DISTIX_ARCH     « native » pour ne construire que l'architecture de la machine
+#   DISTIX_OUT      dossier de sortie (par défaut build/), pour ne pas remplacer une app ouverte
+#
+# Hardened Runtime activé, app non sandboxée (brief § 8). Sparkle (mises à jour) est embarqué
+# dans Contents/Frameworks et ses exécutables imbriqués sont resignés avec la même identité,
+# sans quoi Apple refuse la notarisation (voir QuiX, Support/sign-sparkle.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/app"
@@ -16,10 +22,17 @@ OUT="${DISTIX_OUT:-$ROOT/build}"
 mkdir -p "$OUT"
 APP="$OUT/DistiX.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN/DistiX" "$APP/Contents/MacOS/DistiX"
 cp "$BIN/distix-cli" "$APP/Contents/MacOS/distix-cli"
 for b in "$BIN"/*.bundle; do cp -R "$b" "$APP/Contents/Resources/"; done
+
+# Sparkle : le framework à côté des autres, et l'exécutable qui sait l'y trouver.
+SPARKLE="$(find "$BIN" "$ROOT/app/.build" -name Sparkle.framework -type d -prune 2>/dev/null | head -1)"
+if [[ -z "$SPARKLE" ]]; then echo "Sparkle.framework introuvable" >&2; exit 1; fi
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/DistiX" 2>/dev/null || true
+
 # Icône : générée à partir de app/AppIcon.png.
 if [[ -f "$ROOT/app/AppIcon.png" ]]; then
   ICONSET="$(mktemp -d)/AppIcon.iconset"
@@ -32,7 +45,9 @@ if [[ -f "$ROOT/app/AppIcon.png" ]]; then
 fi
 
 BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
-VERSION="0.1.0"
+VERSION="${DISTIX_VERSION:-0.1.0}"
+# Clé publique des mises à jour : sans elle, l'app désactive Sparkle (constructions de dev).
+SU_KEY="$(tr -d '[:space:]' < "$ROOT/app/sparkle-public-key.txt" 2>/dev/null || true)"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -51,16 +66,30 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>Usage personnel.</string>
+  <key>SUFeedURL</key><string>https://github.com/xavierkain-apps/distix/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>${SU_KEY}</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>86400</integer>
 </dict>
 </plist>
 PLIST
 
 IDENTITY="${SIGN_IDENTITY:--}"
-codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP/Contents/MacOS/distix-cli"
-codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$APP"
-codesign --verify --strict --verbose=2 "$APP"
+TS="--timestamp=none"
+[[ "$IDENTITY" != "-" ]] && TS="--timestamp"
+sign() { [[ -e "$1" ]] && codesign --force --options runtime $TS --preserve-metadata=entitlements --sign "$IDENTITY" "$1"; return 0; }
+# Du plus profond vers le plus extérieur.
+V="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current"
+sign "$V/XPCServices/Downloader.xpc"
+sign "$V/XPCServices/Installer.xpc"
+sign "$V/Autoupdate"
+sign "$V/Updater.app"
+sign "$APP/Contents/Frameworks/Sparkle.framework"
+codesign --force --options runtime $TS --sign "$IDENTITY" "$APP/Contents/MacOS/distix-cli"
+codesign --force --options runtime $TS --sign "$IDENTITY" "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
 
 cd "$OUT"
 rm -f DistiX.zip
 ditto -c -k --keepParent DistiX.app DistiX.zip
-echo "OK : $APP (build $BUILD_NUMBER)"
+echo "OK : $APP (version $VERSION, build $BUILD_NUMBER, signature ${IDENTITY})"

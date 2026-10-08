@@ -133,6 +133,11 @@ public enum ReadState: String, Codable, Sendable {
     case new, updated
 }
 
+/// Tri d'une fiche par l'utilisateur : la base « propre » est faite des fiches validées.
+public enum ReviewState: String, Codable, CaseIterable, Sendable {
+    case validated, discarded
+}
+
 public struct FicheRecord: Codable, FetchableRecord, PersistableRecord, Identifiable, Hashable, Sendable {
     public static let databaseTableName = "fiches"
     public var id: String
@@ -154,6 +159,10 @@ public struct FicheRecord: Codable, FetchableRecord, PersistableRecord, Identifi
     /// Traduction à la demande (FicheContent en JSON) et sa langue.
     public var translation: Data?
     public var translationLanguage: String?
+    /// nil = à trier.
+    public var review: ReviewState?
+    /// Fournisseur et modèle qui ont rédigé la fiche (« Claude Code · sonnet »).
+    public var model: String?
 
     public var decoded: FicheContent? { try? JSONDecoder.distix.decode(FicheContent.self, from: content) }
     public var decodedTranslation: FicheContent? {
@@ -176,6 +185,8 @@ public struct ThemeRecord: Codable, FetchableRecord, MutablePersistableRecord, I
     public var id: Int64?
     public var conversationId: String
     public var name: String
+    /// Ce que l'utilisateur attend de ce thème ; guide le classement et la rédaction.
+    public var objective: String?
 
     public mutating func didInsert(_ inserted: InsertionSuccess) { id = inserted.rowID }
 }

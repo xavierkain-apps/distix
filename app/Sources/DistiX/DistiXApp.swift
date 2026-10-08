@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct DistiXApp: App {
     @State private var model = AppModel()
+    private let updater = Updater.shared
 
     var body: some Scene {
         Window("DistiX", id: "main") {
@@ -12,6 +13,14 @@ struct DistiXApp: App {
                 .frame(minWidth: 960, minHeight: 600)
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                if updater.isAvailable {
+                    Button(L("Rechercher des mises à jour…")) { updater.checkNow() }
+                }
+            }
+            CommandGroup(replacing: .help) {
+                Button(L("Découvrir DistiX")) { model.showTour = true }
+            }
             CommandGroup(after: .newItem) {
                 Button(L("Synchroniser maintenant")) { model.syncNow() }
                     .keyboardShortcut("r")
